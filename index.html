@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>MatchBuilder – Google Sheets Script Generator</title>
+<style>
+  :root { --b:#111; --g:#666; --bg:#fafafa; --bd:#e6e6e6; }
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.45;margin:24px;max-width:980px}
+  h1{font-size:1.6rem;margin:0 0 12px}
+  h2{font-size:1.1rem;margin:20px 0 8px}
+  fieldset{border:1px solid var(--bd);border-radius:12px;padding:16px;margin:16px 0}
+  legend{padding:0 8px;font-weight:600}
+  label{display:flex;align-items:center;gap:8px;margin:6px 0}
+  .row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .grid{display:grid;grid-template-columns:1.2fr .6fr auto auto;gap:8px;align-items:center;margin-top:8px}
+  .hdr{font-weight:600;border-bottom:1px solid var(--bd);padding-bottom:6px;margin-bottom:6px}
+  .muted{color:var(--g);font-size:.92rem}
+  textarea{width:100%;min-height:260px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;padding:12px;border:1px solid var(--bd);border-radius:12px;background:#fff}
+  input[type="number"],input[type="text"],select{width:100%;padding:8px;border:1px solid var(--bd);border-radius:10px;background:#fff}
+  button{padding:10px 14px;border:1px solid var(--bd);border-radius:10px;background:#fff;cursor:pointer}
+  button.primary{background:var(--b);color:#fff;border-color:var(--b)}
+  .pill{display:inline-block;padding:2px 8px;border:1px solid var(--bd);border-radius:999px;font-size:.78rem}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px}
+</style>
+</head>
+<body>
+  <h1>MatchBuilder</h1>
+  <p class="muted">Configure your intake fields, weights, and dealbreakers. Click “Generate Script” to get a Google Apps Script that creates your Sheets layout and a matching stub you can extend.</p>
+
+  <fieldset>
+    <legend>Project</legend>
+    <div class="row">
+      <label>Project title
+        <input id="title" type="text" placeholder="e.g., NYC Singles – Oct 2025" />
+      </label>
+      <label>Problem type
+        <select id="problem">
+          <option value="weighted_bipartite">Weighted bipartite (assignment)</option>
+          <option value="stable_marriage">Stable marriage (mutual prefs)</option>
+          <option value="round_robin">Round robin (speed rounds)</option>
+        </select>
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Intake fields & scoring</legend>
+    <p class="muted">Toggle the fields you’ll collect. For each, set a weight (0–1) and whether it’s a dealbreaker (with optional mutual requirement).</p>
+    <div id="fields" class="grid">
+      <!-- header -->
+      <div class="hdr">Field</div>
+      <div class="hdr">Weight</div>
+      <div class="hdr">Dealbreaker</div>
+      <div class="hdr">Mutual?</div>
+      <!-- rows injected by JS -->
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+      <input id="customField" type="text" placeholder="Add custom field (e.g., Religion, Smoking, Pets)"/>
+      <button id="addCustom">Add field</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Sheets & build options</legend>
+    <div class="row">
+      <label>Intake sheet name
+        <input id="intakeName" type="text" value="Intake" />
+      </label>
+      <label>Settings sheet name
+        <input id="settingsName" type="text" value="Settings" />
+      </label>
+      <label>Pairs sheet name
+        <input id="pairsName" type="text" value="Pairs" />
+      </label>
+      <label>Build mode
+        <select id="buildMode">
+          <option value="bound">Build in this spreadsheet (bound)</option>
+          <option value="new">Create a new spreadsheet</option>
+        </select>
+      </label>
+    </div>
+  </fieldset>
+
+  <div class="toolbar">
+    <button class="primary" id="generate">Generate Script</button>
+    <button id="copy">Copy</button>
+    <button id="download">Download .gs</button>
+  </div>
+
+  <p class="muted">Paste into a bound Apps Script (Extensions → Apps Script). Run <span class="pill">buildSheets()</span> once to scaffold tabs. “Run Matching (stub)” is included to extend later.</p>
+  <textarea id="output" placeholder="// Generated Apps Script will appear here…"></textarea>
+
+<script>
+const STOCK_FIELDS = [
+  { key: 'Email', label:'Email', fixed: true, enabled: true, weight: 0, dealbreaker: false, mutual: false },
+  { key: 'Gender', label:'Gender', enabled: true, weight: 0, dealbreaker: false, mutual: true },
+  { key: 'Age', label:'Age', enabled: true, weight: 0.25, dealbreaker: false, mutual: false },
+  { key: 'Location', label:'Location', enabled: true, weight: 0.20, dealbreaker: false, mutual: true },
+  { key: 'DatingIntent', label:'Dating Intent', enabled: true, weight: 0.35, dealbreaker: false, mutual: true },
+  { key: 'Diet', label:'Dietary Restriction', enabled: true, weight: 0.20, dealbreaker: false, mutual: false },
+];
+
+let fields = STOCK_FIELDS.map(f => ({...f}));
+
+function renderFieldRows(){
+  const c = document.getElementById('fields');
+  // wipe existing rows (except header 4 cells)
+  c.querySelectorAll('.rowitem').forEach(n=>n.remove());
+  fields.forEach((f,i)=>{
+    const enabled = f.enabled ? 'checked' : '';
+    const disabled = f.fixed ? 'disabled' : '';
+    const deal = f.dealbreaker ? 'checked' : '';
+    const mut = f.mutual ? 'checked' : '';
+    const label = f.label || f.key;
+
+    const div1 = document.createElement('div');
+    div1.className = 'rowitem';
+    div1.innerHTML = `<label><input type="checkbox" data-kind="enabled" data-i="${i}" ${enabled} ${disabled}/> ${label}</label>`;
+
+    const div2 = document.createElement('div');
+    div2.className = 'rowitem';
+    div2.innerHTML = `<input type="number" step="0.01" min="0" max="1" data-kind="weight" data-i="${i}" value="${f.weight ?? 0}">`;
+
+    const div3 = document.createElement('div');
+    div3.className = 'rowitem';
+    div3.style.textAlign='center';
+    div3.innerHTML = `<input type="checkbox" data-kind="dealbreaker" data-i="${i}" ${deal}>`;
+
+    const div4 = document.createElement('div');
+    div4.className = 'rowitem';
+    div4.style.textAlign='center';
+    div4.innerHTML = `<input type="checkbox" data-kind="mutual" data-i="${i}" ${mut}>`;
+
+    c.append(div1,div2,div3,div4);
+  });
+}
+
+document.addEventListener('input', (e)=>{
+  const kind = e.target.getAttribute('data-kind');
+  if(!kind) return;
+  const i = +e.target.getAttribute('data-i');
+  if(kind==='enabled') fields[i].enabled = e.target.checked;
+  if(kind==='weight') fields[i].weight = +e.target.value;
+  if(kind==='dealbreaker') fields[i].dealbreaker = e.target.checked;
+  if(kind==='mutual') fields[i].mutual = e.target.checked;
+});
+
+document.getElementById('addCustom').addEventListener('click', ()=>{
+  const name = (document.getElementById('customField').value||'').trim();
+  if(!name) return;
+  fields.push({ key: name.replace(/\s+/g,''), label: name, enabled: true, weight: 0.1, dealbreaker:false, mutual:false });
+  document.getElementById('customField').value = '';
+  renderFieldRows();
+});
+
+function cfg(){
+  return {
+    title: document.getElementById('title').value || 'Matching Project',
+    problem: document.getElementById('problem').value,
+    buildMode: document.getElementById('buildMode').value,
+    sheets: {
+      intake: document.getElementById('intakeName').value || 'Intake',
+      settings: document.getElementById('settingsName').value || 'Settings',
+      pairs: document.getElementById('pairsName').value || 'Pairs',
+    },
+    fields: fields.filter(f=>f.enabled).map(({key,label,weight,dealbreaker,mutual,fixed})=>(
+      { key, label:label||key, weight:+(weight||0), dealbreaker:!!dealbreaker, mutual:!!mutual, fixed:!!fixed }
+    ))
+  };
+}
+
+function genGAS(){
+  const config = cfg();
+  const jsonCfg = JSON.stringify(config, null, 2);
+  const now = new Date().toISOString();
+  const code = `/**
+ * Generated by MatchBuilder
+ * ${now}
+ *
+ * HOW TO:
+ * - Paste this into a bound Apps Script (Extensions → Apps Script) OR run buildSheetsNew() in a standalone script.
+ * - Bound scripts can show a custom menu (requires Spreadsheet UI context).
+ */
+const CONFIG = ${jsonCfg};
+
+/** MENU (bound spreadsheets only) **/
+function onOpen(){
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if(!ss) return;
+  SpreadsheetApp.getUi()
+    .createMenu('Matching')
+    .addItem('Build Sheets', 'buildSheets')
+    .addItem('Run Matching (stub)', 'runMatching')
+    .addToUi();
+}
+
+/** Build in current spreadsheet (BOUND) **/
+function buildSheets(){
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if(!ss) throw new Error('No active spreadsheet. Use buildSheetsNew() in a standalone script.');
+  return _buildSheetsCore(ss);
+}
+
+/** Create a NEW spreadsheet (STANDALONE-safe) **/
+function buildSheetsNew(){
+  const ss = SpreadsheetApp.create(CONFIG.title + ' – Matching');
+  const url = _buildSheetsCore(ss);
+  Logger.log('Created: ' + url);
+  return url;
+}
+
+function _buildSheetsCore(ss){
+  const { intake, settings, pairs } = CONFIG.sheets;
+  const intakeSh = _getOrCreate(ss, intake);
+  const settingsSh = _getOrCreate(ss, settings);
+  const pairsSh = _getOrCreate(ss, pairs);
+
+  // Intake headers
+  const headers = ['ID','Timestamp'].concat(CONFIG.fields.map(f=>f.label));
+  intakeSh.clear({contentsOnly:true});
+  intakeSh.getRange(1,1,1,headers.length).setValues([headers]).setFontWeight('bold');
+  intakeSh.setFrozenRows(1);
+
+  // Settings table
+  const setHeaders = ['Field','Key','Weight','Dealbreaker','Mutual'];
+  settingsSh.clear({contentsOnly:true});
+  settingsSh.getRange(1,1,1,setHeaders.length).setValues([setHeaders]).setFontWeight('bold');
+  const rows = CONFIG.fields.map(f=>[f.label, f.key, f.weight, f.dealbreaker?'Y':'', f.mutual?'Y':'']);
+  if(rows.length) settingsSh.getRange(2,1,rows.length,setHeaders.length).setValues(rows);
+  settingsSh.autoResizeColumns(1,setHeaders.length);
+
+  // Pairs table
+  pairsSh.clear({contentsOnly:true});
+  pairsSh.getRange(1,1,1,3).setValues([['LeftID','RightID','Score']]).setFontWeight('bold');
+
+  _nice(ss, intakeSh, settingsSh, pairsSh);
+  SpreadsheetApp.flush();
+  return ss.getUrl();
+}
+
+function _getOrCreate(ss, name){ return ss.getSheetByName(name) || ss.insertSheet(name); }
+function _nice(ss, ...sheets){ sheets.forEach(sh=>sh.setFrozenRows(1)); try{ ss.setActiveSheet(sheets[0]); }catch(e){} }
+
+/** ===== MATCHING STUBS you can extend ===== **/
+
+function runMatching(){
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if(!ss) throw new Error('Bind this script to a spreadsheet to run matching.');
+  const intakeSh = ss.getSheetByName(CONFIG.sheets.intake);
+  const pairsSh = ss.getSheetByName(CONFIG.sheets.pairs);
+  if(!intakeSh || !pairsSh) throw new Error('Missing Intake/Pairs sheet. Run "Build Sheets" first.');
+
+  const data = _readTable(intakeSh);
+  // TODO: Split cohorts, build score/cost matrix, route to solver per CONFIG.problem.
+  // For now, write a placeholder:
+  pairsSh.getRange(2,1,1,3).setValues([['A@example.com','B@example.com', 0.0]]);
+  try { SpreadsheetApp.getUi().alert('Matching stub ran. Replace with your solver.'); } catch(e) {}
+}
+
+function _readTable(sh){
+  const values = sh.getDataRange().getValues();
+  const header = values.shift();
+  return values.filter(r=>r.join('').trim()!=='').map(r=>{
+    const obj = {};
+    header.forEach((h,i)=> obj[h]=r[i]);
+    return obj;
+  });
+}
+
+/** Example: dealbreaker-aware equality scorer (toy) **/
+function scorePair(a, b){
+  let blocked = false, total = 0;
+  CONFIG.fields.forEach(f=>{
+    const av = a[f.label], bv = b[f.label];
+    if(f.dealbreaker){
+      const pass = (String(av).trim()!=='' && String(bv).trim()!=='' && String(av)===String(bv));
+      if(!pass) blocked = true;
+    }else{
+      if(String(av)===String(bv)) total += f.weight||0;
+    }
+  });
+  return blocked ? 0 : Math.min(1,total);
+}
+`;
+  return code;
+}
+
+document.getElementById('generate').addEventListener('click', ()=>{
+  document.getElementById('output').value = genGAS();
+});
+document.getElementById('copy').addEventListener('click', async ()=>{
+  const txt = document.getElementById('output').value;
+  if(!txt) return;
+  await navigator.clipboard.writeText(txt);
+  alert('Copied!');
+});
+document.getElementById('download').addEventListener('click', ()=>{
+  const txt = document.getElementById('output').value;
+  if(!txt) return;
+  const blob = new Blob([txt], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'MatchingGenerator.gs';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(a.href);
+});
+
+renderFieldRows();
+</script>
+</body>
+</html>
