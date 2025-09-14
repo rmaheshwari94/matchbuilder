@@ -1,313 +1,543 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>MatchBuilder – Google Sheets Script Generator</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>MatchBuilder – Speed Dating Toolkit</title>
 <style>
-  :root { --b:#111; --g:#666; --bg:#fafafa; --bd:#e6e6e6; }
-  *{box-sizing:border-box}
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.45;margin:24px;max-width:980px}
-  h1{font-size:1.6rem;margin:0 0 12px}
-  h2{font-size:1.1rem;margin:20px 0 8px}
-  fieldset{border:1px solid var(--bd);border-radius:12px;padding:16px;margin:16px 0}
-  legend{padding:0 8px;font-weight:600}
-  label{display:flex;align-items:center;gap:8px;margin:6px 0}
-  .row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-  .grid{display:grid;grid-template-columns:1.2fr .6fr auto auto;gap:8px;align-items:center;margin-top:8px}
-  .hdr{font-weight:600;border-bottom:1px solid var(--bd);padding-bottom:6px;margin-bottom:6px}
+  :root{--b:#111;--g:#666;--bd:#e6e6e6}
+  *{box-sizing:border-box} body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.45;margin:24px;max-width:980px}
+  h1{font-size:1.6rem;margin:0 0 12px} legend{font-weight:700;padding:0 8px}
+  fieldset{border:1px solid var(--bd);border-radius:12px;padding:16px;margin:16px 0;background:#fff}
   .muted{color:var(--g);font-size:.92rem}
-  textarea{width:100%;min-height:260px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;padding:12px;border:1px solid var(--bd);border-radius:12px;background:#fff}
-  input[type="number"],input[type="text"],select{width:100%;padding:8px;border:1px solid var(--bd);border-radius:10px;background:#fff}
+  .row{display:grid;gap:12px}.row2{grid-template-columns:repeat(2,minmax(0,1fr))}.row3{grid-template-columns:repeat(3,minmax(0,1fr))}
+  label{display:flex;gap:8px;align-items:center}
+  input[type="text"],input[type="number"],select{width:100%;padding:8px;border:1px solid var(--bd);border-radius:10px;background:#fff}
+  input[type="range"]{width:100%}
   button{padding:10px 14px;border:1px solid var(--bd);border-radius:10px;background:#fff;cursor:pointer}
   button.primary{background:var(--b);color:#fff;border-color:var(--b)}
-  .pill{display:inline-block;padding:2px 8px;border:1px solid var(--bd);border-radius:999px;font-size:.78rem}
-  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px}
+  textarea{width:100%;min-height:280px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;padding:12px;border:1px solid var(--bd);border-radius:12px;background:#fff}
+  .subtle{opacity:.65}.list{display:grid;gap:8px}
 </style>
 </head>
 <body>
-  <h1>MatchBuilder</h1>
-  <p class="muted">Configure your intake fields, weights, and dealbreakers. Click “Generate Script” to get a Google Apps Script that creates your Sheets layout and a matching stub you can extend.</p>
+<h1>MatchBuilder</h1>
+<p class="muted">Configure your event. Click “Generate Script” to get a Google Apps Script with a simple, numbered menu. It builds Sheets, Forms, Slides, QR codes, groups, and strong validations.</p>
 
-  <fieldset>
-    <legend>Project</legend>
-    <div class="row">
-      <label>Project title
-        <input id="title" type="text" placeholder="e.g., NYC Singles – Oct 2025" />
-      </label>
-      <label>Problem type
-        <select id="problem">
-          <option value="weighted_bipartite">Weighted bipartite (assignment)</option>
-          <option value="stable_marriage">Stable marriage (mutual prefs)</option>
-          <option value="round_robin">Round robin (speed rounds)</option>
-        </select>
-      </label>
-    </div>
-  </fieldset>
+<form id="f">
+<!-- 1) PROJECT -->
+<fieldset>
+  <legend>Project</legend>
+  <div class="row row2">
+    <label>Project title
+      <input id="title" type="text" placeholder="e.g., NYC Singles – Oct 2025"/>
+    </label>
+  </div>
+  <div class="list" style="margin-top:8px">
+    <label class="subtle"><input type="checkbox" checked disabled/> Create a menu with numbered steps</label>
+    <label class="subtle"><input type="checkbox" checked disabled/> Create template Google Sheets</label>
+    <label><input id="optForm" type="checkbox" checked/> Create intake form</label>
+    <label><input id="optQRCodes" type="checkbox"/> Create QR codes for all forms</label>
+    <label><input id="optSchedule" type="checkbox" checked/> Create speed dating schedule</label>
+    <label><input id="optSlides" type="checkbox" checked/> Create slides for speed dating schedule</label>
+    <label><input id="optGroups" type="checkbox"/> Create groups for activities</label>
+    <label><input id="optPostForm" type="checkbox" checked/> Post-event matching form</label>
+    <label><input id="optReset" type="checkbox" checked/> Complete reset button</label>
+  </div>
+</fieldset>
 
-  <fieldset>
-    <legend>Intake fields & scoring</legend>
-    <p class="muted">Toggle the fields you’ll collect. For each, set a weight (0–1) and whether it’s a dealbreaker (with optional mutual requirement).</p>
-    <div id="fields" class="grid">
-      <!-- header -->
-      <div class="hdr">Field</div>
-      <div class="hdr">Weight</div>
-      <div class="hdr">Dealbreaker</div>
-      <div class="hdr">Mutual?</div>
-      <!-- rows injected by JS -->
-    </div>
-    <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
-      <input id="customField" type="text" placeholder="Add custom field (e.g., Religion, Smoking, Pets)"/>
-      <button id="addCustom">Add field</button>
-    </div>
-  </fieldset>
-
-  <fieldset>
-    <legend>Sheets & build options</legend>
-    <div class="row">
-      <label>Intake sheet name
-        <input id="intakeName" type="text" value="Intake" />
-      </label>
-      <label>Settings sheet name
-        <input id="settingsName" type="text" value="Settings" />
-      </label>
-      <label>Pairs sheet name
-        <input id="pairsName" type="text" value="Pairs" />
-      </label>
-      <label>Build mode
-        <select id="buildMode">
-          <option value="bound">Build in this spreadsheet (bound)</option>
-          <option value="new">Create a new spreadsheet</option>
-        </select>
-      </label>
-    </div>
-  </fieldset>
-
-  <div class="toolbar">
-    <button class="primary" id="generate">Generate Script</button>
-    <button id="copy">Copy</button>
-    <button id="download">Download .gs</button>
+<!-- 2) INTAKE INFO -->
+<fieldset>
+  <legend>Attendee intake information</legend>
+  <p class="muted">These are the participant fields (no weights here). Name & Gender are always included.</p>
+  <div class="list">
+    <label class="subtle"><input type="checkbox" checked disabled/> Name</label>
+    <label class="subtle"><input type="checkbox" checked disabled/> Gender</label>
+    <label><input id="fldEmail" type="checkbox" checked/> Email</label>
+    <label><input id="fldPhone" type="checkbox" checked/> Phone Number</label>
+    <label><input id="fldZip" type="checkbox" checked/> Attendee Zip Code – for distance matching</label>
+    <label><input id="fldDiet" type="checkbox"/> Dietary restriction (discrete)</label>
   </div>
 
-  <p class="muted">Paste into a bound Apps Script (Extensions → Apps Script). Run <span class="pill">buildSheets()</span> once to scaffold tabs. “Run Matching (stub)” is included to extend later.</p>
-  <textarea id="output" placeholder="// Generated Apps Script will appear here…"></textarea>
+  <h4 style="margin:12px 0 6px">Additional variables</h4>
+  <p class="muted">Add optional fields and pick the type. Multi-select is allowed (e.g., Hobbies).</p>
+  <div class="row row3">
+    <input id="addName" type="text" placeholder="e.g., Hobbies"/>
+    <select id="addType">
+      <option value="nominal">Nominal (single choice)</option>
+      <option value="multi">Multi-select (checkboxes)</option>
+      <option value="numeric">Numeric (continuous)</option>
+    </select>
+    <button type="button" id="addVar">Add field</button>
+  </div>
+  <ul id="varList" class="list" style="margin-top:8px"></ul>
+</fieldset>
+
+<!-- 3) PREFERENCES -->
+<fieldset>
+  <legend>Attendee preferences (used for the form + weights)</legend>
+  <div class="list">
+    <label><input id="prefGender" type="checkbox" checked/> Preferred Gender(s) — defaults to heterosexual if none selected</label>
+    <div class="subtle" style="margin-left:22px">Dealbreaker is automatically ON for this.</div>
+
+    <div class="row row2" style="margin-top:6px">
+      <label><input id="prefAge" type="checkbox" checked/> Age preferences (18–50)</label>
+      <label>Dealbreaker? <select id="prefAgeDB"><option value="no">No</option><option value="yes">Yes</option></select></label>
+    </div>
+
+    <div class="row row2">
+      <label><input id="prefDist" type="checkbox"/> Distance</label>
+      <div class="muted">Intake will ask: “Are you OK with meeting someone outside your geographic area?”</div>
+    </div>
+  </div>
+
+  <h4 style="margin:12px 0 6px">Importance sliders</h4>
+  <p class="muted">0 = ignore, 100 = very important</p>
+  <div id="prefSliders" class="list"></div>
+</fieldset>
+
+<!-- 4) SCHEDULE -->
+<fieldset>
+  <legend>Speed-dating schedule</legend>
+  <div class="row row3">
+    <label>Rounds <input id="rounds" type="number" value="8" min="1"/></label>
+    <label>Stations <input id="stations" type="number" value="8" min="1"/></label>
+    <label>Slides name <input id="slidesName" type="text" placeholder="e.g., NYC Singles – Slides"/></label>
+  </div>
+  <p class="muted" id="qrNote" style="display:none">QR to the post-event match form will be on the final slide.</p>
+</fieldset>
+
+<!-- 5) GROUPS -->
+<fieldset>
+  <legend>Groups for activities</legend>
+  <div class="row row3">
+    <label>Group size <input id="grpSize" type="number" value="5" min="2"/></label>
+    <label>Balance by <select id="grpBalance">
+      <option value="none">None (random)</option>
+      <option value="gender">Gender</option>
+      <option value="hobby">A selected nominal/multi field</option>
+      <option value="age">Age (bin)</option>
+    </select></label>
+    <label>Allow repeats? <select id="grpRepeats"><option value="no">No</option><option value="yes">Yes</option></select></label>
+  </div>
+  <div class="row row2" style="margin-top:8px">
+    <label>Balance field (if hobby) <input id="grpBalanceField" type="text" placeholder="Exact field label, e.g., Hobbies"/></label>
+    <label>Randomization seed <input id="grpSeed" type="text" placeholder="optional"/></label>
+  </div>
+</fieldset>
+
+<!-- 6) POST EVENT -->
+<fieldset>
+  <legend>Post-event matching</legend>
+  <div class="row row2">
+    <label>Allow same-gender matching?
+      <select id="sameGender"><option value="auto">Auto (No if heterosexual-only)</option><option value="yes">Yes</option><option value="no">No</option></select>
+    </label>
+    <label>Email behavior
+      <select id="emailMode">
+        <option value="mutual">Send emails to mutual matches only</option>
+        <option value="both">Send mutual + “you were selected” notices</option>
+        <option value="none">Do not send emails (export only)</option>
+      </select>
+    </label>
+  </div>
+</fieldset>
+
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 14px">
+  <button type="button" id="gen" class="primary">Generate Script</button>
+  <button type="button" id="copy">Copy</button>
+  <button type="button" id="dl">Download .gs</button>
+</div>
+<textarea id="out" placeholder="// Apps Script will appear here…"></textarea>
+</form>
 
 <script>
-const STOCK_FIELDS = [
-  { key: 'Email', label:'Email', fixed: true, enabled: true, weight: 0, dealbreaker: false, mutual: false },
-  { key: 'Gender', label:'Gender', enabled: true, weight: 0, dealbreaker: false, mutual: true },
-  { key: 'Age', label:'Age', enabled: true, weight: 0.25, dealbreaker: false, mutual: false },
-  { key: 'Location', label:'Location', enabled: true, weight: 0.20, dealbreaker: false, mutual: true },
-  { key: 'DatingIntent', label:'Dating Intent', enabled: true, weight: 0.35, dealbreaker: false, mutual: true },
-  { key: 'Diet', label:'Dietary Restriction', enabled: true, weight: 0.20, dealbreaker: false, mutual: false },
-];
+const extraFields = [];      // {label, type}
+const sliders = [];          // {key,label,weight0_1}
+const el = id => document.getElementById(id);
 
-let fields = STOCK_FIELDS.map(f => ({...f}));
+// ----- UI helpers -----
+function addVar(label, type){
+  if(!label) return;
+  extraFields.push({label, type});
+  const li = document.createElement('li');
+  li.textContent = `${label} (${type})`;
+  document.getElementById('varList').appendChild(li);
 
-function renderFieldRows(){
-  const c = document.getElementById('fields');
-  // wipe existing rows (except header 4 cells)
-  c.querySelectorAll('.rowitem').forEach(n=>n.remove());
-  fields.forEach((f,i)=>{
-    const enabled = f.enabled ? 'checked' : '';
-    const disabled = f.fixed ? 'disabled' : '';
-    const deal = f.dealbreaker ? 'checked' : '';
-    const mut = f.mutual ? 'checked' : '';
-    const label = f.label || f.key;
-
-    const div1 = document.createElement('div');
-    div1.className = 'rowitem';
-    div1.innerHTML = `<label><input type="checkbox" data-kind="enabled" data-i="${i}" ${enabled} ${disabled}/> ${label}</label>`;
-
-    const div2 = document.createElement('div');
-    div2.className = 'rowitem';
-    div2.innerHTML = `<input type="number" step="0.01" min="0" max="1" data-kind="weight" data-i="${i}" value="${f.weight ?? 0}">`;
-
-    const div3 = document.createElement('div');
-    div3.className = 'rowitem';
-    div3.style.textAlign='center';
-    div3.innerHTML = `<input type="checkbox" data-kind="dealbreaker" data-i="${i}" ${deal}>`;
-
-    const div4 = document.createElement('div');
-    div4.className = 'rowitem';
-    div4.style.textAlign='center';
-    div4.innerHTML = `<input type="checkbox" data-kind="mutual" data-i="${i}" ${mut}>`;
-
-    c.append(div1,div2,div3,div4);
+  // add slider
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <div class="row row2">
+      <div><strong>${label}</strong> <span class="muted">(${type})</span></div>
+      <div>
+        <input type="range" min="0" max="100" value="50" data-key="${label}">
+        <div class="muted">Importance: <span data-val="${label}">50</span>/100</div>
+      </div>
+    </div>`;
+  document.getElementById('prefSliders').appendChild(wrap);
+  sliders.push({key:label,label,weight0_1:0.5});
+  const range = wrap.querySelector(`input[data-key="${label}"]`);
+  const val   = wrap.querySelector(`span[data-val="${label}"]`);
+  range.addEventListener('input', e=>{
+    val.textContent = e.target.value;
+    const s = sliders.find(s=>s.key===label);
+    s.weight0_1 = (+e.target.value)/100;
   });
 }
-
-document.addEventListener('input', (e)=>{
-  const kind = e.target.getAttribute('data-kind');
-  if(!kind) return;
-  const i = +e.target.getAttribute('data-i');
-  if(kind==='enabled') fields[i].enabled = e.target.checked;
-  if(kind==='weight') fields[i].weight = +e.target.value;
-  if(kind==='dealbreaker') fields[i].dealbreaker = e.target.checked;
-  if(kind==='mutual') fields[i].mutual = e.target.checked;
+function ensureBaseSliders(){
+  const base = [
+    {key:'Preferred Gender(s)',label:'Preferred Gender(s)',w:80},
+    {key:'Age preferences',label:'Age preferences',w:70},
+    {key:'Distance',label:'Distance',w:30}
+  ];
+  const wrap = document.getElementById('prefSliders');
+  base.forEach(b=>{
+    const div = document.createElement('div');
+    div.innerHTML = `
+      <div class="row row2">
+        <div><strong>${b.label}</strong></div>
+        <div>
+          <input type="range" min="0" max="100" value="${b.w}" data-key="${b.key}">
+          <div class="muted">Importance: <span data-val="${b.key}">${b.w}</span>/100</div>
+        </div>
+      </div>`;
+    wrap.appendChild(div);
+    sliders.push({key:b.key,label:b.label,weight0_1:b.w/100});
+    const range = div.querySelector(`input[data-key="${b.key}"]`);
+    const val   = div.querySelector(`span[data-val="${b.key}"]`);
+    range.addEventListener('input', e=>{
+      val.textContent = e.target.value;
+      const s = sliders.find(s=>s.key===b.key);
+      s.weight0_1 = (+e.target.value)/100;
+    });
+  });
+}
+document.getElementById('addVar').addEventListener('click', ()=>{
+  addVar(el('addName').value.trim(), el('addType').value);
+  el('addName').value='';
 });
-
-document.getElementById('addCustom').addEventListener('click', ()=>{
-  const name = (document.getElementById('customField').value||'').trim();
-  if(!name) return;
-  fields.push({ key: name.replace(/\s+/g,''), label: name, enabled: true, weight: 0.1, dealbreaker:false, mutual:false });
-  document.getElementById('customField').value = '';
-  renderFieldRows();
+document.getElementById('optQRCodes').addEventListener('change', ()=>{
+  document.getElementById('qrNote').style.display = el('optQRCodes').checked ? 'block':'none';
 });
+ensureBaseSliders();
 
-function cfg(){
+// ----- Build config from UI -----
+function buildConfig(){
   return {
-    title: document.getElementById('title').value || 'Matching Project',
-    problem: document.getElementById('problem').value,
-    buildMode: document.getElementById('buildMode').value,
-    sheets: {
-      intake: document.getElementById('intakeName').value || 'Intake',
-      settings: document.getElementById('settingsName').value || 'Settings',
-      pairs: document.getElementById('pairsName').value || 'Pairs',
+    title: el('title').value || 'Speed Dating Event',
+    options:{
+      makeMenu:true, makeSheets:true,
+      makeForm: el('optForm').checked,
+      makeQRCodes: el('optQRCodes').checked,
+      makeSchedule: el('optSchedule').checked,
+      makeSlides: el('optSlides').checked,
+      makeGroups: el('optGroups').checked,
+      makePostForm: el('optPostForm').checked,
+      makeReset: el('optReset').checked
     },
-    fields: fields.filter(f=>f.enabled).map(({key,label,weight,dealbreaker,mutual,fixed})=>(
-      { key, label:label||key, weight:+(weight||0), dealbreaker:!!dealbreaker, mutual:!!mutual, fixed:!!fixed }
-    ))
+    intake:{
+      base:['Name','Gender'],
+      email: el('fldEmail').checked,
+      phone: el('fldPhone').checked,
+      zip:   el('fldZip').checked,
+      diet:  el('fldDiet').checked,
+      extra: extraFields  // [{label,type}]
+    },
+    prefs:{
+      gender: el('prefGender').checked, // forced dealbreaker
+      age:    {on: el('prefAge').checked, dealbreaker: el('prefAgeDB').value==='yes'},
+      dist:   el('prefDist').checked,
+      weights: sliders.map(s=>({key:s.key, weight:s.weight0_1}))
+    },
+    schedule:{
+      rounds: +el('rounds').value||8,
+      stations: +el('stations').value||8,
+      slidesName: el('slidesName').value||'Speed Dating Slides',
+      qrOnSlides: el('optQRCodes').checked
+    },
+    groups:{
+      size:+el('grpSize').value||5,
+      balance: el('grpBalance').value,
+      balanceField: el('grpBalanceField').value.trim(),
+      allowRepeats: el('grpRepeats').value==='yes',
+      seed: el('grpSeed').value.trim()||null
+    },
+    post:{
+      sameGender: el('sameGender').value, // auto | yes | no
+      emailMode: el('emailMode').value    // mutual | both | none
+    }
   };
 }
 
-function genGAS(){
-  const config = cfg();
-  const jsonCfg = JSON.stringify(config, null, 2);
+// ----- Generate Apps Script -----
+function generateGAS(){
+  const cfg = buildConfig();
+  const cfgJSON = JSON.stringify(cfg,null,2);
   const now = new Date().toISOString();
-  const code = `/**
- * Generated by MatchBuilder
+
+  return `/**
+ * Generated by MatchBuilder (UI v3)
  * ${now}
- *
- * HOW TO:
- * - Paste this into a bound Apps Script (Extensions → Apps Script) OR run buildSheetsNew() in a standalone script.
- * - Bound scripts can show a custom menu (requires Spreadsheet UI context).
+ * Paste into a bound Apps Script (Extensions → Apps Script). Use the numbered menu.
+ * Uses: FormApp, SlidesApp, UrlFetchApp, Maps service (no external key needed).
  */
-const CONFIG = ${jsonCfg};
+const CONFIG = ${cfgJSON};
 
-/** MENU (bound spreadsheets only) **/
+/** Friendly, numbered menu **/
 function onOpen(){
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  if(!ss) return;
-  SpreadsheetApp.getUi()
-    .createMenu('Matching')
-    .addItem('Build Sheets', 'buildSheets')
-    .addItem('Run Matching (stub)', 'runMatching')
-    .addToUi();
+  const ui = SpreadsheetApp.getUi();
+  const m = ui.createMenu('Match Setup – Start Here');
+  m.addItem('1) Set up your Sheets', 'step1_setupSheets');
+  if (CONFIG.options.makeForm) m.addItem('2) Make the Sign-Up Form', 'step2_makeSignupForm');
+  if (CONFIG.options.makeSchedule) m.addItem('3) Build the Speed-Dating Schedule', 'step3_buildSchedule');
+  if (CONFIG.options.makeSlides) m.addItem('4) Create the Slideshow', 'step4_createSlides');
+  if (CONFIG.options.makeGroups) m.addItem('5) Create Activity Groups', 'step5_createGroups');
+  if (CONFIG.options.makePostForm) m.addItem('6) Make the Post-Event Match Form', 'step6_makePostForm');
+  if (CONFIG.options.makeReset) m.addItem('Reset everything (danger)', 'stepX_resetEverything');
+  m.addToUi();
 }
 
-/** Build in current spreadsheet (BOUND) **/
-function buildSheets(){
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  if(!ss) throw new Error('No active spreadsheet. Use buildSheetsNew() in a standalone script.');
-  return _buildSheetsCore(ss);
-}
-
-/** Create a NEW spreadsheet (STANDALONE-safe) **/
-function buildSheetsNew(){
-  const ss = SpreadsheetApp.create(CONFIG.title + ' – Matching');
-  const url = _buildSheetsCore(ss);
-  Logger.log('Created: ' + url);
-  return url;
-}
-
-function _buildSheetsCore(ss){
-  const { intake, settings, pairs } = CONFIG.sheets;
-  const intakeSh = _getOrCreate(ss, intake);
-  const settingsSh = _getOrCreate(ss, settings);
-  const pairsSh = _getOrCreate(ss, pairs);
+/** ===== STEP 1: SHEETS scaffold (+ header protection) ===== */
+function step1_setupSheets(){
+  const ss = SpreadsheetApp.getActive();
+  const intake   = _sheet(ss,'Intake');
+  const settings = _sheet(ss,'Settings');
+  const pairs    = _sheet(ss,'Pairs');
+  const schedule = _sheet(ss,'Schedule');
+  const groups   = _sheet(ss,'Groups');
+  const qr       = _sheet(ss,'QR Codes');
 
   // Intake headers
-  const headers = ['ID','Timestamp'].concat(CONFIG.fields.map(f=>f.label));
-  intakeSh.clear({contentsOnly:true});
-  intakeSh.getRange(1,1,1,headers.length).setValues([headers]).setFontWeight('bold');
-  intakeSh.setFrozenRows(1);
+  const hdr = ['Timestamp','Name','Gender'];
+  if (CONFIG.intake.email) hdr.push('Email');
+  if (CONFIG.intake.phone) hdr.push('Phone Number');
+  if (CONFIG.intake.zip)   hdr.push('Zip');
+  if (CONFIG.intake.diet)  hdr.push('Dietary restriction');
+  CONFIG.intake.extra.forEach(f=>hdr.push(f.label));
+  intake.clear();
+  intake.getRange(1,1,1,hdr.length).setValues([hdr]).setFontWeight('bold');
+  intake.setFrozenRows(1); _protectHeader(intake,hdr.length);
 
-  // Settings table
-  const setHeaders = ['Field','Key','Weight','Dealbreaker','Mutual'];
-  settingsSh.clear({contentsOnly:true});
-  settingsSh.getRange(1,1,1,setHeaders.length).setValues([setHeaders]).setFontWeight('bold');
-  const rows = CONFIG.fields.map(f=>[f.label, f.key, f.weight, f.dealbreaker?'Y':'', f.mutual?'Y':'']);
-  if(rows.length) settingsSh.getRange(2,1,rows.length,setHeaders.length).setValues(rows);
-  settingsSh.autoResizeColumns(1,setHeaders.length);
+  // Settings
+  settings.clear();
+  settings.getRange(1,1,1,2).setValues([['Key','Value']]).setFontWeight('bold');
+  settings.getRange(2,1,7,2).setValues([
+    ['Project Title', CONFIG.title],
+    ['Rounds', CONFIG.schedule.rounds],
+    ['Stations', CONFIG.schedule.stations],
+    ['Slides Name', CONFIG.schedule.slidesName],
+    ['Email Mode', CONFIG.post.emailMode],
+    ['SameGender', CONFIG.post.sameGender],
+    ['Created', new Date()]
+  ]);
+  settings.setFrozenRows(1); _protectHeader(settings,2);
 
-  // Pairs table
-  pairsSh.clear({contentsOnly:true});
-  pairsSh.getRange(1,1,1,3).setValues([['LeftID','RightID','Score']]).setFontWeight('bold');
+  // Pairs/Schedule/Groups/QR with protected headers
+  pairs.clear();    pairs.getRange(1,1,1,4).setValues([['A_ID','B_ID','Round','Score']]).setFontWeight('bold');    pairs.setFrozenRows(1);    _protectHeader(pairs,4);
+  schedule.clear(); schedule.getRange(1,1,1,4).setValues([['Round','Station','Person A','Person B']]).setFontWeight('bold'); schedule.setFrozenRows(1); _protectHeader(schedule,4);
+  groups.clear();   groups.getRange(1,1,1,3).setValues([['Group','Member','Notes']]).setFontWeight('bold');       groups.setFrozenRows(1);   _protectHeader(groups,3);
+  qr.clear();       qr.getRange(1,1,1,3).setValues([['Label','URL','QR Image']]).setFontWeight('bold');           qr.setFrozenRows(1);       _protectHeader(qr,3);
 
-  _nice(ss, intakeSh, settingsSh, pairsSh);
-  SpreadsheetApp.flush();
-  return ss.getUrl();
+  SpreadsheetApp.getUi().alert('Sheets are ready. Headers are protected.');
 }
 
-function _getOrCreate(ss, name){ return ss.getSheetByName(name) || ss.insertSheet(name); }
-function _nice(ss, ...sheets){ sheets.forEach(sh=>sh.setFrozenRows(1)); try{ ss.setActiveSheet(sheets[0]); }catch(e){} }
+/** ===== STEP 2: SIGN-UP FORM with strong validation (18–50, ZIP/phone/email) ===== */
+function step2_makeSignupForm(){
+  const title = CONFIG.title + ' – Intake';
+  const form = FormApp.create(title).setAllowResponseEdits(false);
+  form.setCollectEmail(true);
 
-/** ===== MATCHING STUBS you can extend ===== **/
+  // Name
+  const name = form.addTextItem().setTitle('Name').setRequired(true);
+  name.setValidation(FormApp.createTextValidation().requireTextLengthGreaterThan(1).build());
 
-function runMatching(){
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  if(!ss) throw new Error('Bind this script to a spreadsheet to run matching.');
-  const intakeSh = ss.getSheetByName(CONFIG.sheets.intake);
-  const pairsSh = ss.getSheetByName(CONFIG.sheets.pairs);
-  if(!intakeSh || !pairsSh) throw new Error('Missing Intake/Pairs sheet. Run "Build Sheets" first.');
+  // Gender
+  form.addListItem().setTitle('Gender').setChoiceValues(['Woman','Man','Nonbinary','Other']).setRequired(true);
 
-  const data = _readTable(intakeSh);
-  // TODO: Split cohorts, build score/cost matrix, route to solver per CONFIG.problem.
-  // For now, write a placeholder:
-  pairsSh.getRange(2,1,1,3).setValues([['A@example.com','B@example.com', 0.0]]);
-  try { SpreadsheetApp.getUi().alert('Matching stub ran. Replace with your solver.'); } catch(e) {}
-}
+  // Email is auto-collected by setCollectEmail(true)
 
-function _readTable(sh){
-  const values = sh.getDataRange().getValues();
-  const header = values.shift();
-  return values.filter(r=>r.join('').trim()!=='').map(r=>{
-    const obj = {};
-    header.forEach((h,i)=> obj[h]=r[i]);
-    return obj;
-  });
-}
+  // Phone (aggressive US pattern)
+  if (CONFIG.intake.phone){
+    const p = form.addTextItem().setTitle('Phone Number').setRequired(true);
+    p.setValidation(FormApp.createTextValidation()
+      .requireTextMatchesPattern('^(\\+1\\s?)?(\\(?\\d{3}\\)?[\\s.-]?)\\d{3}[\\s.-]?\\d{4}$')
+      .setHelpText('Enter a valid US phone number')
+      .build());
+  }
 
-/** Example: dealbreaker-aware equality scorer (toy) **/
-function scorePair(a, b){
-  let blocked = false, total = 0;
-  CONFIG.fields.forEach(f=>{
-    const av = a[f.label], bv = b[f.label];
-    if(f.dealbreaker){
-      const pass = (String(av).trim()!=='' && String(bv).trim()!=='' && String(av)===String(bv));
-      if(!pass) blocked = true;
-    }else{
-      if(String(av)===String(bv)) total += f.weight||0;
+  // ZIP (5 or 5-4)
+  if (CONFIG.intake.zip){
+    const z = form.addTextItem().setTitle('Zip').setRequired(true);
+    z.setValidation(FormApp.createTextValidation()
+      .requireTextMatchesPattern('^\\d{5}(-\\d{4})?$')
+      .setHelpText('Enter 5 digits or 5-4 ZIP')
+      .build());
+  }
+
+  // Diet
+  if (CONFIG.intake.diet){
+    form.addListItem().setTitle('Dietary restriction').setChoiceValues(['None','Vegetarian','Vegan','Kosher','Halal','Other']).setRequired(true);
+  }
+
+  // Additional variables
+  CONFIG.intake.extra.forEach(f=>{
+    if (f.type==='nominal'){
+      form.addListItem().setTitle(f.label).setChoiceValues(['Option 1','Option 2','Option 3']).setRequired(true);
+    } else if (f.type==='multi'){
+      const it = form.addCheckboxItem().setTitle(f.label).setChoiceValues(['Option A','Option B','Option C']).setRequired(true);
+      it.setValidation(FormApp.createCheckboxValidation().requireSelectAtLeast(1).build());
+    } else { // numeric
+      const n = form.addTextItem().setTitle(f.label+' (number)').setRequired(true);
+      n.setValidation(FormApp.createTextValidation()
+        .requireTextMatchesPattern('^-?\\d+(\\.\\d+)?$')
+        .setHelpText('Numbers only')
+        .build());
     }
   });
-  return blocked ? 0 : Math.min(1,total);
+
+  // Preferences
+  if (CONFIG.prefs.gender){
+    const g = form.addCheckboxItem().setTitle('Preferred Gender(s)').setChoiceValues(['Woman','Man','Nonbinary']).setRequired(true);
+    g.setValidation(FormApp.createCheckboxValidation().requireSelectAtLeast(1).build());
+  }
+  if (CONFIG.prefs.age.on){
+    const minA = form.addTextItem().setTitle('Preferred Minimum Age (18–50)').setRequired(true);
+    minA.setValidation(FormApp.createTextValidation()
+      .requireTextMatchesPattern('^(1[89]|[2-4]\\d|50)$')
+      .setHelpText('Enter a number from 18 to 50')
+      .build());
+    const maxA = form.addTextItem().setTitle('Preferred Maximum Age (18–50)').setRequired(true);
+    maxA.setValidation(FormApp.createTextValidation()
+      .requireTextMatchesPattern('^(1[89]|[2-4]\\d|50)$')
+      .setHelpText('Enter a number from 18 to 50 (≥ min age)')
+      .build());
+    if (CONFIG.prefs.age.dealbreaker){
+      form.addMultipleChoiceItem().setTitle('Age is a dealbreaker?').setChoiceValues(['Yes','No']).setRequired(true);
+    }
+  }
+  if (CONFIG.prefs.dist){
+    form.addMultipleChoiceItem().setTitle('OK meeting outside geographic area?').setChoiceValues(['Yes','No']).setRequired(true);
+  }
+
+  _writeQR('Intake Form', form.getEditUrl(), form.getPublishedUrl());
+  SpreadsheetApp.getUi().alert('Sign-Up Form created:\\n' + form.getPublishedUrl());
+}
+
+/** ===== STEP 3: SCHEDULE (scaffold) ===== */
+function step3_buildSchedule(){
+  const ss = SpreadsheetApp.getActive(), sched = ss.getSheetByName('Schedule');
+  if (!sched) throw new Error('Run Step 1 first.');
+  const rounds = CONFIG.schedule.rounds, stations = CONFIG.schedule.stations;
+  const out = [];
+  for (let r=1;r<=rounds;r++){ for (let s=1;s<=stations;s++){ out.push([r,s,'(TBD A)','(TBD B)']); } }
+  sched.clear();
+  sched.getRange(1,1,1,4).setValues([['Round','Station','Person A','Person B']]).setFontWeight('bold'); _protectHeader(sched,4);
+  if (out.length) sched.getRange(2,1,out.length,4).setValues(out);
+  SpreadsheetApp.getUi().alert('Schedule scaffolded. Replace (TBD) or wire in your pairing logic.');
+}
+
+/** ===== STEP 4: SLIDES (title + final QR if enabled) ===== */
+function step4_createSlides(){
+  const pres = SlidesApp.create(CONFIG.schedule.slidesName);
+  pres.getSlides()[0].getShapes()[0].getText().setText(CONFIG.title);
+  if (CONFIG.options.makeQRCodes && CONFIG.options.makePostForm){
+    const postUrl = _ensurePostFormUrl();
+    const slide = pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+    slide.insertTextBox('Scan to submit your matches').setLeft(50).setTop(40);
+    const blob = UrlFetchApp.fetch(_qr(postUrl, 400)).getBlob();
+    slide.insertImage(blob).setLeft(50).setTop(100).setWidth(300);
+  }
+  SpreadsheetApp.getUi().alert('Slideshow created: ' + pres.getUrl());
+}
+
+/** ===== STEP 5: GROUPS (placeholder; balancing knobs exist) ===== */
+function step5_createGroups(){
+  const ss = SpreadsheetApp.getActive(), groups = ss.getSheetByName('Groups');
+  if (!groups) throw new Error('Run Step 1 first.');
+  groups.clear();
+  groups.getRange(1,1,1,3).setValues([['Group','Member','Notes']]).setFontWeight('bold'); _protectHeader(groups,3);
+  // Placeholder rows:
+  for (let g=1; g<=Math.max(3, Math.floor(20/(CONFIG.groups.size||5))); g++){
+    for (let i=1;i<=CONFIG.groups.size;i++){ groups.appendRow([g, '(TBD member)', '']); }
+  }
+  SpreadsheetApp.getUi().alert('Groups scaffolded (you can replace with your logic).');
+}
+
+/** ===== STEP 6: POST-EVENT MATCH FORM (aggressive validation) ===== */
+function step6_makePostForm(){
+  const form = FormApp.create(CONFIG.title + ' – Post-Event Match');
+  form.setCollectEmail(true);
+  form.addSectionHeaderItem().setTitle('Who did you want to match with?');
+
+  // Ask for comma-separated emails (strong validation). You can later auto-populate choices instead.
+  const p = form.addParagraphTextItem().setTitle('Enter emails of people you liked (comma-separated)').setRequired(true);
+  p.setValidation(FormApp.createParagraphTextValidation()
+    .requireTextMatchesPattern('^\\s*([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\s*(,\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\s*)*)$')
+    .setHelpText('Example: a@b.com, c@d.org')
+    .build());
+
+  _writeQR('Post-Event Form', form.getEditUrl(), form.getPublishedUrl());
+  SpreadsheetApp.getUi().alert('Post-Event Form created: ' + form.getPublishedUrl());
+}
+
+/** RESET */
+function stepX_resetEverything(){
+  const ss = SpreadsheetApp.getActive();
+  ['Schedule','Pairs','Groups','QR Codes'].forEach(n=>{const sh=ss.getSheetByName(n); if(sh) sh.clear();});
+  SpreadsheetApp.getUi().alert('Cleared generated sheets. (Forms/Slides remain.)');
+}
+
+/** ===== Helpers (headers, QR, Maps/Distance) ===== */
+function _sheet(ss,name){ return ss.getSheetByName(name)||ss.insertSheet(name); }
+function _protectHeader(sh, cols){
+  const r = sh.getRange(1,1,1,cols);
+  const p = r.protect().setDescription(sh.getName()+' header');
+  p.removeEditors(p.getEditors());
+  p.addEditor(Session.getEffectiveUser()); // only you can edit headers
+}
+function _qr(url, size){ return 'https://chart.googleapis.com/chart?chs='+size+'x'+size+'&cht=qr&chl='+encodeURIComponent(url); }
+function _writeQR(label, editUrl, liveUrl){
+  const ss = SpreadsheetApp.getActive(), sh = _sheet(ss,'QR Codes');
+  const row = sh.getLastRow()+1;
+  sh.getRange(row,1,1,2).setValues([[label, liveUrl]]);
+  try{
+    if (CONFIG.options.makeQRCodes){
+      const blob = UrlFetchApp.fetch(_qr(liveUrl, 300)).getBlob();
+      sh.insertImage(blob, 3, row);
+    }
+  }catch(e){}
+}
+function _ensurePostFormUrl(){ return 'https://example.com/post-form'; }
+
+/** Google Maps (Apps Script Maps service) */
+function geocodeZip(zip){
+  try{
+    const res = Maps.newGeocoder().geocode(zip);
+    if(res.status==='OK' && res.results && res.results[0]){
+      const loc = res.results[0].geometry.location;
+      return {lat:loc.lat, lng:loc.lng};
+    }
+  }catch(e){}
+  return null;
+}
+function distanceMilesFromZips(zipA, zipB){
+  const a = geocodeZip(zipA), b = geocodeZip(zipB);
+  if(!a||!b) return null;
+  return _haversineMiles(a.lat,a.lng,b.lat,b.lng);
+}
+function _haversineMiles(lat1,lon1,lat2,lon2){
+  const R=3958.761; const toRad=x=>x*Math.PI/180;
+  const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
+  const s = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(s));
 }
 `;
-  return code;
 }
 
-document.getElementById('generate').addEventListener('click', ()=>{
-  document.getElementById('output').value = genGAS();
-});
-document.getElementById('copy').addEventListener('click', async ()=>{
-  const txt = document.getElementById('output').value;
-  if(!txt) return;
-  await navigator.clipboard.writeText(txt);
-  alert('Copied!');
-});
-document.getElementById('download').addEventListener('click', ()=>{
-  const txt = document.getElementById('output').value;
-  if(!txt) return;
-  const blob = new Blob([txt], {type:'text/plain'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'MatchingGenerator.gs';
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(a.href);
-});
-
-renderFieldRows();
+// Generate / copy / download
+document.getElementById('gen').addEventListener('click', ()=>{ document.getElementById('out').value = generateGAS(); });
+document.getElementById('copy').addEventListener('click', async ()=>{ const t=document.getElementById('out').value; if(!t) return; await navigator.clipboard.writeText(t); alert('Copied!'); });
+document.getElementById('dl').addEventListener('click', ()=>{ const t=document.getElementById('out').value; if(!t) return; const blob=new Blob([t],{type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='SpeedDatingToolkit.gs'; document.body.appendChild(a); a.click(); a.remove(); });
 </script>
 </body>
 </html>
