@@ -84,11 +84,11 @@
 <!-- 3) INTAKE INFO -->
 <fieldset>
   <legend>Attendee intake information</legend>
-  <p class="muted">Name & Gender always collected. Age is included (18–50) so age preferences work.</p>
+  <p class="muted">Name & Gender always collected. Age will be asked in the form (clean dropdown), so we keep this UI simple.</p>
   <div class="list">
     <label class="subtle"><input type="checkbox" checked disabled/> Name</label>
     <label class="subtle"><input type="checkbox" checked disabled/> Gender</label>
-    <label class="subtle"><input type="checkbox" checked disabled/> Age (18–50)</label>
+    <label class="subtle"><input type="checkbox" checked disabled/> Age</label>
     <label><input id="fldEmail" type="checkbox" checked/> Email</label>
     <label><input id="fldPhone" type="checkbox" checked/> Phone Number</label>
     <label><input id="fldZip" type="checkbox" checked/> Attendee Zip Code — for distance matching</label>
@@ -112,7 +112,10 @@
 <!-- 4) PREFERENCES -->
 <fieldset>
   <legend>Attendee preferences (used for matching)</legend>
-  <p class="muted">Each preference shows a dealbreaker toggle (right column) and a full-width importance slider below. If “Gender Preference(s)” isn’t checked, default pairing is heterosexual.</p>
+  <p class="muted">
+    Set importance with sliders. Check “Dealbreaker” to enforce a hard rule.
+    <br><strong>What does Dealbreaker mean?</strong> If either person marks a preference as a dealbreaker and the pair doesn’t satisfy it, they will <em>never</em> be matched. This may reduce the number of possible pairings.
+  </p>
   <div id="prefList" class="list"></div>
 </fieldset>
 
@@ -176,9 +179,10 @@ const extraFields = [];   // {label,type}
 let prefDefs = [];        // built from intake toggles + extras
 
 function basePrefs(){
+  // Gender preference is ALWAYS a hard dealbreaker; no slider.
   const prefs = [
-    { key:'genderPref', label:'Gender Preference(s) — if not checked, default is heterosexual pairing', type:'special-gender', deal:true, lock:true, w:0.8 },
-    { key:'ageRange',   label:'Age Preferences (18–50)', type:'age', deal:false, lock:false, w:0.7 },
+    { key:'genderPref', label:'Gender Preference(s)', type:'special-gender', deal:true, lock:true, w:0 },
+    { key:'ageRange',   label:'Age Preference', type:'age', deal:false, lock:false, w:0.7 },
     ...(el('fldZip').checked ? [{ key:'distance', label:'Geographical Distance Matching', type:'distance', dealNote:'each attendee will be asked if this is a dealbreaker', lock:false, w:0.3 }] : [])
   ];
   if (el('fldDiet').checked) prefs.push({ key:'Dietary restriction', label:'Dietary restriction', type:'nominal', deal:false, lock:false, w:0.5 });
@@ -190,17 +194,27 @@ function renderPrefs(){
   prefDefs = basePrefs();
   const wrap = el('prefList'); wrap.innerHTML = '';
   prefDefs.forEach(p=>{
+    // Label + dealbreaker cell
     const row = document.createElement('div'); row.className='prefRow';
     const left = document.createElement('div'); left.innerHTML = `<strong>${p.label}</strong>`;
     const right = document.createElement('div');
-    if (p.type==='distance'){ right.innerHTML = `<span class="muted">${p.dealNote}</span>`; }
-    else { right.innerHTML = `<label><input type="checkbox" data-k="${p.key}" data-kind="deal" ${p.lock?'checked disabled':''}/> Dealbreaker</label>`; }
+    if (p.type==='distance'){
+      right.innerHTML = `<span class="muted">${p.dealNote}</span>`;
+    } else if (p.type==='special-gender'){
+      // Always-on dealbreaker, no slider
+      right.innerHTML = `<span class="muted">Dealbreaker (always on)</span>`;
+    } else {
+      right.innerHTML = `<label><input type="checkbox" data-k="${p.key}" data-kind="deal" ${p.lock?'checked disabled':''}/> Dealbreaker</label>`;
+    }
     row.append(left,right); wrap.appendChild(row);
 
-    const slider = document.createElement('div'); slider.className='sliderRow';
-    slider.innerHTML = `<input type="range" min="0" max="100" value="${Math.round(p.w*100)}" data-k="${p.key}" data-kind="weight">
-      <div class="muted">Importance: <span data-val="${p.key}">${Math.round(p.w*100)}</span>/100</div>`;
-    wrap.appendChild(slider);
+    // Slider row: skip for special-gender (no importance)
+    if (p.type!=='special-gender'){
+      const slider = document.createElement('div'); slider.className='sliderRow';
+      slider.innerHTML = `<input type="range" min="0" max="100" value="${Math.round((p.w||0)*100)}" data-k="${p.key}" data-kind="weight">
+        <div class="muted">Importance: <span data-val="${p.key}">${Math.round((p.w||0)*100)}</span>/100</div>`;
+      wrap.appendChild(slider);
+    }
   });
 }
 document.addEventListener('input',(e)=>{
@@ -244,7 +258,12 @@ function cfg(){
       diet:  el('fldDiet').checked,
       extra: extraFields
     },
-    prefs: prefDefs.map(p=>({ key:p.key, type:p.type, on:true, deal:(p.lock?true:!!p.deal), weight:+(p.w||0).toFixed(3), note:p.dealNote||null })),
+    prefs: prefDefs.map(p=>({
+      key:p.key, type:p.type, on:true,
+      deal:(p.type==='special-gender') ? true : (p.lock?true:!!p.deal),
+      weight: (p.type==='special-gender') ? 0 : +((p.w||0).toFixed(3)),
+      note:p.dealNote||null
+    })),
     schedule:{
       rounds:+el('rounds').value||8,
       stations:+el('stations').value||8,
@@ -337,9 +356,9 @@ function step1_makeSignupForm(){
   });
 
   // Preferences mirrored into form
+  // Gender preference: always a hard dealbreaker, but we still need attendees' choices
   if (_prefOn('genderPref')){
-    const g = form.addCheckboxItem().setTitle('Preferred Gender(s)').setChoiceValues(['Woman','Man','Nonbinary']).setRequired(true);
-    g.setValidation(FormApp.createCheckboxValidation().requireSelectAtLeast(1).build());
+    form.addCheckboxItem().setTitle('Preferred Gender(s)').setChoiceValues(['Woman','Man','Nonbinary']).setRequired(true);
   }
   if (_prefOn('ageRange')){
     form.addListItem().setTitle('Preferred Minimum Age (18–50)').setChoiceValues(ages).setRequired(true);
@@ -642,8 +661,9 @@ function distanceMilesFromZips(zipA, zipB){
 }
 function _hav(lat1,lon1,lat2,lon2){
   const R=3958.761; const toRad=x=>x*Math.PI/180;
-  const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
-  const s = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  const dLat=toRad(lat2-lat1), dLon=toRad(x=>x)*0; // placeholder to prevent unused var warning
+  const dLon2=toRad(lon2-lon1);
+  const s = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon2/2)**2;
   return 2*R*Math.asin(Math.sqrt(s));
 }
 
@@ -655,7 +675,7 @@ function _pref(key){ return CONFIG.prefs.find(x=>x.key===key); }
 function _score(a,b, defaultHetero){
   const gA=(a['Gender']||'').toLowerCase(), gB=(b['Gender']||'').toLowerCase();
 
-  // Gender
+  // Gender (hard dealbreaker if enabled)
   if (!_prefOn('genderPref')){
     const hetero = (gA==='woman' && gB==='man') || (gA==='man' && gB==='woman');
     if (!hetero) return 0;
