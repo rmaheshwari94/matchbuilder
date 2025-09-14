@@ -26,11 +26,20 @@
   .prefRow{display:grid;grid-template-columns:1fr auto;align-items:center;gap:12px}
   .sliderRow{margin:2px 0 14px}
   .hide{display:none}
+
+  /* Flow builder */
+  .flow-wrap{border:1px dashed var(--bd);border-radius:12px;padding:10px}
+  .flow-list{display:flex;gap:10px;flex-wrap:wrap;min-height:64px}
+  .flow-step{border:1px solid var(--bd);border-radius:12px;padding:10px 12px;background:#fafafa;cursor:grab;user-select:none}
+  .flow-step.dragging{opacity:.5}
+  .flow-step.hide{display:none}
+  .flow-presets{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+  .tag{display:inline-block;padding:2px 8px;border:1px solid var(--bd);border-radius:999px;font-size:.85rem;background:#fff}
 </style>
 </head>
 <body>
 <h1>MatchBuilder</h1>
-<p class="muted">Generate a Google Apps Script with a simple menu that builds Forms, a Hungarian-style schedule, optional Slides & QR codes, Groups (with mid-event intent), and post-event email.</p>
+<p class="muted">Generate a Google Apps Script with a simple menu that builds Forms, a Hungarian-style schedule, optional Slides & QR codes, Groups (with optional pre-activity intent), and post-event email.</p>
 
 <form id="f">
 <!-- 1) PROJECT -->
@@ -53,32 +62,28 @@
   </div>
 </fieldset>
 
-<!-- 2) ACTIVITY FLOW -->
+<!-- 2) DRAG & DROP FLOW -->
 <fieldset>
-  <legend>Activity flow & options</legend>
-  <p class="muted">Choose the order you plan to run. You can still run steps in any order from the menu.</p>
-  <div class="list" style="margin-bottom:8px">
-    <label><input type="radio" name="flow" value="intake-speed-groups-post" checked/> Intake → Speed Dating → Group Activity → Post-Event Matching</label>
-    <label><input type="radio" name="flow" value="intake-groups-post"/> Intake → Group Activity → Post-Event Matching</label>
-    <label><input type="radio" name="flow" value="intake-speed-post"/> Intake → Speed Dating → Post-Event Matching</label>
-    <label><input type="radio" name="flow" value="intake-speed-groups"/> Intake → Speed Dating → Group Activity</label>
-    <label><input type="radio" name="flow" value="intake-groups-speed"/> Intake → Group Activity → Speed Dating</label>
+  <legend>Build your flow (drag to reorder)</legend>
+  <p class="muted">Turn steps on/off above. If <em>Speed Dating</em> comes before <em>Group Activity</em>, we’ll add a mid-event “Group-Activity Intent” form automatically.</p>
+
+  <div class="flow-presets">
+    <button type="button" class="tag" data-preset="intake-speed-groups-post">Intake → Speed Dating → Group Activity → Post-Event Matching</button>
+    <button type="button" class="tag" data-preset="intake-groups-speed-post">Intake → Group Activity → Speed Dating → Post-Event Matching</button>
+    <button type="button" class="tag" data-preset="intake-groups-post">Intake → Group Activity → Post-Event Matching</button>
+    <button type="button" class="tag" data-preset="intake-speed-post">Intake → Speed Dating → Post-Event Matching</button>
+    <button type="button" class="tag" data-preset="intake-speed-groups">Intake → Speed Dating → Group Activity (no post)</button>
+    <button type="button" class="tag" data-preset="intake-groups-speed">Intake → Group Activity → Speed Dating (no post)</button>
   </div>
 
-  <h4 style="margin:8px 0 6px">Speed-dating options</h4>
-  <div class="list">
-    <label><input id="keepSeatedMinority" type="checkbox"/> Keep the minority gender seated (other gender rotates)</label>
+  <div class="flow-wrap">
+    <div id="flowList" class="flow-list" aria-label="Flow">
+      <div class="flow-step" draggable="true" data-step="intake" id="step-intake">Intake</div>
+      <div class="flow-step" draggable="true" data-step="speed"  id="step-speed">Speed Dating</div>
+      <div class="flow-step" draggable="true" data-step="groups" id="step-groups">Group Activity</div>
+      <div class="flow-step" draggable="true" data-step="post"   id="step-post">Post-Event Matching</div>
+    </div>
   </div>
-
-  <h4 style="margin:12px 0 6px">Group-activity options</h4>
-  <div class="row row3">
-    <label><input id="grpGenderBalance" type="checkbox"/> Balance genders in each group</label>
-    <label><input id="collectIntent" type="checkbox" checked/> Collect “who I want to see in group activity”</label>
-    <label>Max requests
-      <input id="maxIntent" type="number" min="1" value="3"/>
-    </label>
-  </div>
-  <p class="muted">The Group-Activity Intent form is independent of post-event matching.</p>
 </fieldset>
 
 <!-- 3) INTAKE INFO -->
@@ -113,8 +118,8 @@
 <fieldset>
   <legend>Attendee preferences (used for matching)</legend>
   <p class="muted">
-    Set importance with sliders. Check “Dealbreaker” to enforce a hard rule.
-    <br><strong>What does Dealbreaker mean?</strong> If either person marks a preference as a dealbreaker and the pair doesn’t satisfy it, they will <em>never</em> be matched. This may reduce the number of possible pairings.
+    Set importance with sliders. Check “Dealbreaker” to enforce a hard rule.<br>
+    <strong>What does Dealbreaker mean?</strong> If either person marks a preference as a dealbreaker and the pair doesn’t satisfy it, they will <em>never</em> be matched. This may reduce the number of possible pairings.
   </p>
   <div id="prefList" class="list"></div>
 </fieldset>
@@ -127,30 +132,24 @@
     <label>Stations <input id="stations" type="number" value="8" min="1"/></label>
     <label id="slidesNameWrap">Google Slides File Name <input id="slidesName" type="text" placeholder="e.g., NYC Singles – Slides"/></label>
   </div>
+  <div class="list" style="margin-top:8px">
+    <label><input id="keepSeatedMinority" type="checkbox"/> Keep the minority gender seated (other gender rotates)</label>
+  </div>
   <p class="muted hide" id="qrNote">QR to the post-event match form will be on the final slide.</p>
 </fieldset>
 
 <!-- 6) GROUPS -->
-<fieldset>
+<fieldset id="groupsFs">
   <legend>Groups for activities</legend>
+  <p class="muted">Groups are created using intake preferences and, if your flow has Speed Dating before Group Activity, attendees’ pre-activity requests (intent).</p>
   <div class="row row3">
     <label>Group size <input id="grpSize" type="number" value="5" min="2"/></label>
-    <label>Balance by <select id="grpBalance">
-      <option value="none">None (random)</option>
-      <option value="gender">Gender</option>
-      <option value="hobby">A selected nominal/multi field</option>
-      <option value="age">Age (bin)</option>
-    </select></label>
-    <label>Allow repeats? <select id="grpRepeats"><option value="no">No</option><option value="yes">Yes</option></select></label>
-  </div>
-  <div class="row row2" style="margin-top:8px">
-    <label>Balance field (if hobby) <input id="grpBalanceField" type="text" placeholder="Exact field label, e.g., Hobbies"/></label>
-    <label>Randomization seed <input id="grpSeed" type="text" placeholder="optional"/></label>
+    <label><input id="grpGenderBalance" type="checkbox"/> Balance genders in each group</label>
   </div>
 </fieldset>
 
 <!-- 7) POST EVENT -->
-<fieldset>
+<fieldset id="postFs">
   <legend>Post-event matching</legend>
   <div class="row row2">
     <label><input id="sameGenderOK" type="checkbox"/> Allow same-gender matching</label>
@@ -168,13 +167,18 @@
   <button type="button" id="gen" class="primary">Generate Script</button>
   <button type="button" id="copy">Copy</button>
   <button type="button" id="dl">Download .gs</button>
+  <button type="button" id="clear">Clear</button>
 </div>
 <textarea id="out" placeholder="// Apps Script will appear here…"></textarea>
 </form>
 
 <script>
-/* ---------- UI logic ---------- */
+/* ---------- helpers ---------- */
 const el = id => document.getElementById(id);
+const q = (sel,root=document)=>root.querySelector(sel);
+const qa = (sel,root=document)=>Array.from(root.querySelectorAll(sel));
+
+/* ---------- dynamic prefs ---------- */
 const extraFields = [];   // {label,type}
 let prefDefs = [];        // built from intake toggles + extras
 
@@ -189,26 +193,18 @@ function basePrefs(){
   extraFields.forEach(f=> prefs.push({ key:f.label, label:f.label, type:f.type, deal:false, lock:false, w:0.5 }));
   return prefs;
 }
-
 function renderPrefs(){
   prefDefs = basePrefs();
   const wrap = el('prefList'); wrap.innerHTML = '';
   prefDefs.forEach(p=>{
-    // Label + dealbreaker cell
     const row = document.createElement('div'); row.className='prefRow';
     const left = document.createElement('div'); left.innerHTML = `<strong>${p.label}</strong>`;
     const right = document.createElement('div');
-    if (p.type==='distance'){
-      right.innerHTML = `<span class="muted">${p.dealNote}</span>`;
-    } else if (p.type==='special-gender'){
-      // Always-on dealbreaker, no slider
-      right.innerHTML = `<span class="muted">Dealbreaker (always on)</span>`;
-    } else {
-      right.innerHTML = `<label><input type="checkbox" data-k="${p.key}" data-kind="deal" ${p.lock?'checked disabled':''}/> Dealbreaker</label>`;
-    }
+    if (p.type==='distance'){ right.innerHTML = `<span class="muted">${p.dealNote}</span>`; }
+    else if (p.type==='special-gender'){ right.innerHTML = `<span class="muted">Dealbreaker (always on)</span>`; }
+    else { right.innerHTML = `<label><input type="checkbox" data-k="${p.key}" data-kind="deal" ${p.lock?'checked disabled':''}/> Dealbreaker</label>`; }
     row.append(left,right); wrap.appendChild(row);
 
-    // Slider row: skip for special-gender (no importance)
     if (p.type!=='special-gender'){
       const slider = document.createElement('div'); slider.className='sliderRow';
       slider.innerHTML = `<input type="range" min="0" max="100" value="${Math.round((p.w||0)*100)}" data-k="${p.key}" data-kind="weight">
@@ -234,11 +230,94 @@ el('optSlides').addEventListener('change', ()=> el('slidesNameWrap').classList.t
 el('optQRCodes').addEventListener('change', ()=> el('qrNote').classList.toggle('hide', !el('optQRCodes').checked));
 renderPrefs(); el('slidesNameWrap').classList.toggle('hide', !el('optSlides').checked);
 
+/* ---------- Flow: drag & drop + presets + dynamic visibility ---------- */
+const flowList = el('flowList');
+let dragged = null;
+
+flowList.addEventListener('dragstart', e=>{
+  const step = e.target.closest('.flow-step'); if(!step) return;
+  dragged = step; step.classList.add('dragging'); e.dataTransfer.effectAllowed='move';
+});
+flowList.addEventListener('dragend', e=>{ const s=e.target.closest('.flow-step'); if(s) s.classList.remove('dragging'); dragged=null; });
+flowList.addEventListener('dragover', e=>{
+  e.preventDefault();
+  const after = getDragAfterElement(flowList, e.clientX, e.clientY);
+  if (!dragged) return;
+  if (after == null){ flowList.appendChild(dragged); }
+  else { flowList.insertBefore(dragged, after); }
+});
+function getDragAfterElement(container, x, y){
+  const els = [...container.querySelectorAll('.flow-step:not(.dragging):not(.hide)')];
+  let closest = null, closestOffset = Number.NEGATIVE_INFINITY;
+  els.forEach(el=>{
+    const rect = el.getBoundingClientRect();
+    const offset = y - rect.top - rect.height/2;
+    if (offset < 0 && offset > closestOffset){ closestOffset = offset; closest = el; }
+  });
+  return closest;
+}
+
+function visibleSteps(){ return qa('.flow-step').filter(s=>!s.classList.contains('hide')).map(s=>s.dataset.step); }
+function intentRelevant(){
+  const steps = visibleSteps();
+  const iSpeed = steps.indexOf('speed');
+  const iGroup = steps.indexOf('groups');
+  return iSpeed !== -1 && iGroup !== -1 && iSpeed < iGroup;
+}
+
+function setStepVisible(stepId, show){
+  const elStep = el('step-'+stepId);
+  if (!elStep) return;
+  elStep.classList.toggle('hide', !show);
+  // If re-showing a step that was hidden, append to end for simplicity
+  if (show && !flowList.contains(elStep)) flowList.appendChild(elStep);
+}
+
+function syncFlowVisibilityFromOptions(){
+  setStepVisible('speed',  el('optSchedule').checked);
+  setStepVisible('groups', el('optGroups').checked);
+  setStepVisible('post',   el('optPostForm').checked);
+  // Show/hide fieldsets too
+  el('groupsFs').classList.toggle('hide', !el('optGroups').checked);
+  el('postFs').classList.toggle('hide', !el('optPostForm').checked);
+  // QR note depends on both Slides + Post
+  el('qrNote').classList.toggle('hide', !(el('optSlides').checked && el('optPostForm').checked));
+}
+['optSchedule','optGroups','optPostForm'].forEach(id=> el(id).addEventListener('change', syncFlowVisibilityFromOptions));
+syncFlowVisibilityFromOptions();
+
+/* Presets */
+const PRESETS = {
+  'intake-speed-groups-post': ['intake','speed','groups','post'],
+  'intake-groups-speed-post': ['intake','groups','speed','post'],
+  'intake-groups-post':       ['intake','groups','post'],
+  'intake-speed-post':        ['intake','speed','post'],
+  'intake-speed-groups':      ['intake','speed','groups'],          // no post
+  'intake-groups-speed':      ['intake','groups','speed']           // no post
+};
+qa('[data-preset]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const key = btn.getAttribute('data-preset');
+    const order = PRESETS[key] || [];
+    // Toggle options based on presence
+    el('optSchedule').checked = order.includes('speed');
+    el('optGroups').checked   = order.includes('groups');
+    el('optPostForm').checked = order.includes('post');
+    syncFlowVisibilityFromOptions();
+    // Reorder visible cards to match preset
+    order.forEach(step=>{
+      const node = el('step-'+step);
+      if (node && !node.classList.contains('hide')) flowList.appendChild(node);
+    });
+  });
+});
+
 /* ---------- Build config ---------- */
+function getFlowOrder(){ return visibleSteps(); }
 function cfg(){
   return {
     title: el('title').value || 'Speed Dating Event',
-    flow: (document.querySelector('input[name="flow"]:checked')?.value) || 'intake-speed-groups-post',
+    flowOrder: getFlowOrder(),  // array like ['intake','speed','groups','post']
     options:{
       makeMenu:true,
       makeForm: el('optForm').checked,
@@ -249,7 +328,7 @@ function cfg(){
       makePostForm: el('optPostForm').checked,
       makeReset: el('optReset').checked
     },
-    speedDating:{ keepMinoritySeated: document.getElementById('keepSeatedMinority').checked },
+    speedDating:{ keepMinoritySeated: el('keepSeatedMinority').checked },
     intake:{
       base:['Name','Gender','Age'],
       email: el('fldEmail').checked,
@@ -272,12 +351,8 @@ function cfg(){
     },
     groups:{
       size:+el('grpSize').value||5,
-      balance: el('grpBalance').value,
-      balanceField: el('grpBalanceField').value.trim(),
-      allowRepeats: el('grpRepeats').value==='yes',
-      seed: el('grpSeed').value.trim()||null,
-      genderBalance: document.getElementById('grpGenderBalance').checked,
-      intent:{ collect: document.getElementById('collectIntent').checked, maxChoices:+document.getElementById('maxIntent').value||3 }
+      genderBalance: el('grpGenderBalance').checked,
+      intent:{ collect: intentRelevant(), maxChoices: 3 } // auto: only if speed precedes groups
     },
     post:{ sameGender: el('sameGenderOK').checked, emailMode: el('emailMode').value }
   };
@@ -291,7 +366,7 @@ function genGAS(){
 /**
  * Generated by MatchBuilder
  * Paste into a bound Apps Script (Extensions → Apps Script). Use the menu.
- * Slim sheets: no Settings tab, no Pairs tab. Response sheets appear only when forms are linked.
+ * Slim sheets: no Settings tab. Response sheets appear only when forms are linked.
  */
 const CONFIG = ${cfgJSON};
 
@@ -302,10 +377,10 @@ function onOpen(){
   if (CONFIG.options.makeForm)    m.addItem('1) Make the Sign-Up Form', 'step1_makeSignupForm');
   if (CONFIG.options.makeSchedule)m.addItem('2) Build the Speed-Dating Schedule', 'step2_buildSchedule');
   if (CONFIG.options.makeSlides)  m.addItem('3) Create the Slideshow', 'step3_createSlides');
-  if (CONFIG.groups?.intent?.collect) m.addItem('4) Make Group-Activity Intent Form', 'step4_makeGroupIntentForm');
+  if (CONFIG.options.makeGroups && CONFIG.groups?.intent?.collect) m.addItem('4) Make Group-Activity Intent Form', 'step4_makeGroupIntentForm');
   if (CONFIG.options.makeGroups)  m.addItem('5) Create Activity Groups', 'step5_createGroups');
   if (CONFIG.options.makePostForm)m.addItem('6) Make the Post-Event Match Form', 'step6_makePostForm');
-  m.addItem('7) Send Results Emails', 'step7_sendResultsEmails');
+  if (CONFIG.options.makePostForm)m.addItem('7) Send Results Emails', 'step7_sendResultsEmails');
   if (CONFIG.options.makeReset)   m.addItem('Reset generated sheets (danger)', 'stepX_resetGenerated');
   m.addToUi();
 }
@@ -356,7 +431,6 @@ function step1_makeSignupForm(){
   });
 
   // Preferences mirrored into form
-  // Gender preference: always a hard dealbreaker, but we still need attendees' choices
   if (_prefOn('genderPref')){
     form.addCheckboxItem().setTitle('Preferred Gender(s)').setChoiceValues(['Woman','Man','Nonbinary']).setRequired(true);
   }
@@ -448,23 +522,27 @@ function step3_createSlides(){
   pres.getSlides()[0].getShapes()[0].getText().setText(CONFIG.title);
   if (CONFIG.options.makeQRCodes && CONFIG.options.makePostForm){
     const postUrl = _ensurePostFormUrl();
-    const slide = pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
-    slide.insertTextBox('Scan to submit your matches').setLeft(50).setTop(40);
-    const blob = UrlFetchApp.fetch(_qr(postUrl, 400)).getBlob();
-    slide.insertImage(blob).setLeft(50).setTop(100).setWidth(300);
+    if (postUrl){
+      const slide = pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+      slide.insertTextBox('Scan to submit your matches').setLeft(50).setTop(40);
+      const blob = UrlFetchApp.fetch(_qr(postUrl, 400)).getBlob();
+      slide.insertImage(blob).setLeft(50).setTop(100).setWidth(300);
+    }
   }
   SpreadsheetApp.getUi().alert('Slideshow created: ' + pres.getUrl());
 }
 
-/** STEP 4: Group-Activity Intent Form (independent of post-event) **/
+/** STEP 4: Group-Activity Intent Form (created only when Speed → Groups) **/
 function step4_makeGroupIntentForm(){
   const ss = SpreadsheetApp.getActive();
   const intake = ss.getSheetByName('Intake Responses');
   if (!intake){ SpreadsheetApp.getUi().alert('Run Sign-Up Form first so we can pull names.'); return; }
+  if (!CONFIG.groups?.intent?.collect){ SpreadsheetApp.getUi().alert('According to your flow, Group Activity does not follow Speed Dating. No intent form needed.'); return; }
+
   const rows = _dedupeByEmail(_read(intake));
   const names = rows.map(r => (r['Name'] ? \`\${r['Name']} <\${r['Email Address']||''}>\` : (r['Email Address']||''))).filter(Boolean);
 
-  const maxN = Math.max(1, Math.min(10, (CONFIG.groups?.intent?.maxChoices || 3)));
+  const maxN = 3; // fixed (no UI)
   const form = FormApp.create((CONFIG.title||'Event') + ' – Group Activity Intent');
   form.setCollectEmail(true);
   form.addSectionHeaderItem().setTitle('Who would you like to have in your group activity?');
@@ -480,7 +558,7 @@ function step4_makeGroupIntentForm(){
   SpreadsheetApp.getUi().alert('Group-Activity Intent form created:\\n' + form.getPublishedUrl());
 }
 
-/** STEP 5: Groups (uses intent softly + optional gender balance) **/
+/** STEP 5: Groups (uses intent softly if available + optional gender balance) **/
 function step5_createGroups(){
   const ss = SpreadsheetApp.getActive();
   const groupsSh = ss.getSheetByName('Groups') || ss.insertSheet('Groups');
@@ -489,7 +567,7 @@ function step5_createGroups(){
 
   const intake = ss.getSheetByName('Intake Responses'); if(!intake) throw new Error('Need Intake Responses.');
   const roster = _dedupeByEmail(_read(intake));
-  const intentSh = ss.getSheetByName('Group Intent Responses');
+  const intentSh = CONFIG.groups?.intent?.collect ? ss.getSheetByName('Group Intent Responses') : null;
   const intent = intentSh ? _likesGraphFromIntent(intentSh) : {};
 
   const size = Math.max(2, CONFIG.groups?.size || 5);
@@ -541,7 +619,7 @@ function step5_createGroups(){
     groupsSh.getRange(row,1,1,3).setValues([[i+1, m['Name'] ? \`\${m['Name']} <\${m['Email Address']||''}>\` : (m['Email Address']||''), '']]);
     row++;
   }));
-  SpreadsheetApp.getUi().alert('Groups created' + (intentSh ? ' (using intent).' : '.') + (wantBalance?' Gender balance aimed.':''));
+  SpreadsheetApp.getUi().alert('Groups created' + (intentSh ? ' (using pre-activity intent).' : '.') + (wantBalance?' Gender balance aimed.':''));
 }
 
 /** STEP 6: Post-Event Form **/
@@ -649,7 +727,7 @@ function _dedupeByEmail(rows){
   return out;
 }
 
-/** Maps distance from ZIPs */
+/** Maps distance from ZIPs (Apps Script Maps service) */
 function geocodeZip(zip){
   try{ const res = Maps.newGeocoder().geocode(zip); if(res.status==='OK' && res.results && res.results[0]){ const loc=res.results[0].geometry.location; return {lat:loc.lat, lng:loc.lng}; } }catch(e){}
   return null;
@@ -661,9 +739,8 @@ function distanceMilesFromZips(zipA, zipB){
 }
 function _hav(lat1,lon1,lat2,lon2){
   const R=3958.761; const toRad=x=>x*Math.PI/180;
-  const dLat=toRad(lat2-lat1), dLon=toRad(x=>x)*0; // placeholder to prevent unused var warning
-  const dLon2=toRad(lon2-lon1);
-  const s = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon2/2)**2;
+  const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
+  const s = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
   return 2*R*Math.asin(Math.sqrt(s));
 }
 
@@ -774,16 +851,13 @@ function _maxWeightedMatchingRound(A,B,seen,allRows, defaultHetero){
 function _hungarian(a){
   const n=a.length; if(!n) return [];
   const m=a.map(r=>r.slice());
-  // subtract row mins
   for(let i=0;i<n;i++){ let min=Math.min.apply(null,m[i]); for(let j=0;j<n;j++) m[i][j]-=min; }
-  // subtract col mins
   for(let j=0;j<n;j++){ let min=Infinity; for(let i=0;i<n;i++) if(m[i][j]<min) min=m[i][j]; for(let i=0;i<n;i++) m[i][j]-=min; }
 
   const star=Array.from({length:n},()=>Array(n).fill(false));
   const prime=Array.from({length:n},()=>Array(n).fill(false));
   const coverRow=Array(n).fill(false), coverCol=Array(n).fill(false);
 
-  // star zeros greedily
   for(let i=0;i<n;i++){
     for(let j=0;j<n;j++){
       if(m[i][j]===0 && !coverRow[i] && !coverCol[j]){ star[i][j]=true; coverRow[i]=coverCol[j]=true; }
@@ -802,7 +876,6 @@ function _hungarian(a){
   function minUncovered(){ let min=Infinity; for(let i=0;i<n;i++) if(!coverRow[i]) for(let j=0;j<n;j++) if(!coverCol[j] && m[i][j]<min) min=m[i][j]; return min; }
 
   while(true){
-    // cover cols with starred zeros
     coverCol.fill(false);
     for(let i=0;i<n;i++) for(let j=0;j<n;j++) if(star[i][j]) coverCol[j]=true;
     if (coverCol.filter(Boolean).length===n) break;
@@ -818,7 +891,6 @@ function _hungarian(a){
     if (sc!==-1){
       coverRow[r]=true; coverCol[sc]=false;
     }else{
-      // augmenting path
       const path=[[r,c]];
       while(true){
         const r2=findStarInCol(path[path.length-1][1]);
@@ -828,7 +900,6 @@ function _hungarian(a){
         path.push([r2, c2]);
       }
       path.forEach(([ri,ci],k)=>{ if(k%2===0) star[ri][ci]=true; else star[ri][ci]=false; });
-      // clear primes and covers
       for(let i=0;i<n;i++) for(let j=0;j<n;j++) prime[i][j]=false;
       coverRow.fill(false); coverCol.fill(false);
     }
@@ -839,7 +910,13 @@ function _hungarian(a){
   return res;
 }
 
-/** Email helpers & intent parsing */
+/** Email & intent helpers */
+function _ensurePostFormUrl(){
+  const ss=SpreadsheetApp.getActive(), sh=ss.getSheetByName('QR Codes'); if(!sh) return null;
+  const v=sh.getDataRange().getValues();
+  for (let i=1;i<v.length;i++){ if (v[i][0]==='Post-Event Form') return v[i][1]; }
+  return null;
+}
 function _loadIntakeMap(){
   const ss = SpreadsheetApp.getActive();
   const sh = ss.getSheetByName('Intake Responses');
@@ -897,9 +974,10 @@ function _emailTplOneWay(recipient, liker, title){
 }
 
 /* ----- Wire buttons ----- */
-document.getElementById('gen').addEventListener('click', ()=>{ document.getElementById('out').value = genGAS(); });
-document.getElementById('copy').addEventListener('click', async ()=>{ const t=document.getElementById('out').value; if(!t) return; await navigator.clipboard.writeText(t); alert('Copied!'); });
-document.getElementById('dl').addEventListener('click', ()=>{ const t=document.getElementById('out').value; if(!t) return; const blob=new Blob([t],{type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='SpeedDatingToolkit.gs'; document.body.appendChild(a); a.click(); a.remove(); });
+el('gen').addEventListener('click', ()=>{ el('out').value = genGAS(); });
+el('copy').addEventListener('click', async ()=>{ const t=el('out').value; if(!t) return; await navigator.clipboard.writeText(t); alert('Copied!'); });
+el('dl').addEventListener('click', ()=>{ const t=el('out').value; if(!t) return; const blob=new Blob([t],{type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='SpeedDatingToolkit.gs'; document.body.appendChild(a); a.click(); a.remove(); });
+el('clear').addEventListener('click', ()=>{ el('out').value=''; });
 </script>
 </body>
 </html>
