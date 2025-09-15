@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>MatchBuilder – Speed Dating Toolkit</title>
 <style>
-  :root{--b:#111;--g:#666;--bd:#e6e6e6}
+  :root{--b:#111;--g:#666;--bd:#e6e6e6;--row:#fafafa}
   *{box-sizing:border-box}
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.45;margin:24px;max-width:980px}
   h1{font-size:1.6rem;margin:0 0 12px}
@@ -23,11 +23,8 @@
   textarea{width:100%;min-height:280px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;padding:12px;border:1px solid var(--bd);border-radius:12px;background:#fff}
   .subtle{opacity:.65}
   .list{display:grid;gap:8px}
-  /* prefs */
-  .prefGrid{display:grid;grid-template-columns:140px 1fr 220px;gap:12px;align-items:center}
-  .prefRow{display:contents}
-  .prefSlider{grid-column:1 / -1;margin:2px 0 14px}
   .hide{display:none}
+
   /* Flow builder */
   .flow-wrap{border:1px dashed var(--bd);border-radius:12px;padding:10px}
   .flow-list{display:flex;gap:10px;flex-wrap:wrap;min-height:64px}
@@ -36,6 +33,16 @@
   .flow-step.hide{display:none}
   .flow-presets{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
   .tag{display:inline-block;padding:2px 8px;border:1px solid var(--bd);border-radius:999px;font-size:.85rem;background:#fff}
+
+  /* Preferences table */
+  .prefTable{display:grid;grid-template-columns:140px 1fr 240px;gap:0;border:1px solid var(--bd);border-radius:12px;overflow:hidden}
+  .prefHdr,.prefRow{display:contents}
+  .prefCell{padding:10px 12px;border-bottom:1px solid var(--bd);background:#fff}
+  .prefHdr .prefCell{font-weight:600;background:#f6f6f6}
+  .prefCell:nth-child(3){text-align:right}
+  .prefSliderRow{display:contents}
+  .prefSliderCell{grid-column:1 / -1;padding:8px 12px;border-bottom:1px solid var(--bd);background:var(--row)}
+  .prefSliderCell.disabled{opacity:.5}
 </style>
 </head>
 <body>
@@ -66,7 +73,7 @@
 <!-- 2) DRAG & DROP FLOW -->
 <fieldset>
   <legend>Build your flow (drag to reorder)</legend>
-  <p class="muted">Turn steps on/off above. If <em>Speed Dating</em> comes before <em>Group Activity</em>, we’ll add a mid-event “Group-Activity Intent” form automatically.</p>
+  <p class="muted">Turn steps on/off above. If <em>Speed Dating</em> comes before <em>Group Activity</em>, we add a mid-event “Group-Activity Intent” form automatically.</p>
 
   <div class="flow-presets">
     <button type="button" class="tag" data-preset="intake-speed-groups-post">Intake → Speed Dating → Group Activity → Post-Event Matching</button>
@@ -90,7 +97,7 @@
 <!-- 3) INTAKE INFO -->
 <fieldset>
   <legend>Attendee intake information</legend>
-  <p class="muted">Name & Gender always collected. Age will be asked in the form (clean dropdown).</p>
+  <p class="muted">Name & Gender always collected. Age will be asked in the form (dropdown, 18–50).</p>
   <div class="list">
     <label class="subtle"><input type="checkbox" checked disabled/> Name</label>
     <label class="subtle"><input type="checkbox" checked disabled/> Gender</label>
@@ -118,11 +125,15 @@
 <!-- 4) PREFERENCES -->
 <fieldset>
   <legend>Attendee preferences (used for matching)</legend>
-  <p class="muted">
-    Toggle “Include?” to decide if attendees are asked about this. If “Dealbreaker” is checked and a pair doesn’t satisfy it, they will <em>never</em> be matched. This may reduce the number of possible pairings.
-  </p>
+  <p class="muted">Toggle <strong>Include?</strong> to decide if attendees are asked this. If <strong>Dealbreaker</strong> is on and a pair doesn’t satisfy it, they will <em>never</em> be matched.</p>
 
-  <div id="prefList" class="prefGrid"></div>
+  <div id="prefList" class="prefTable">
+    <div class="prefHdr">
+      <div class="prefCell">Include?</div>
+      <div class="prefCell">Preference</div>
+      <div class="prefCell">Dealbreaker / Notes</div>
+    </div>
+  </div>
 </fieldset>
 
 <!-- 5) SCHEDULE -->
@@ -183,7 +194,6 @@ const extraFields = []; // {label,type}
 let prefDefs = [];
 
 function basePrefs(){
-  // Default Include? = true for visible prefs
   const prefs = [
     { key:'genderPref', label:'Gender Preference(s)', type:'special-gender', on:true, deal:true, lock:true, w:0, helpLeft:'If unchecked, matchmaking defaults to heterosexual only.' },
     { key:'ageRange',   label:'Age Preference',       type:'age',           on:true, deal:false, w:0.7 },
@@ -196,57 +206,49 @@ function basePrefs(){
 
 function renderPrefs(){
   prefDefs = basePrefs();
-  const wrap = el('prefList'); wrap.innerHTML = '';
+  const table = el('prefList');
+  // Remove all rows after header (keep first 1 child group of 3 cells)
+  while (table.children.length > 1) table.removeChild(table.lastChild);
 
-  prefDefs.forEach(p=>{
-    // Row: Include? | Label | Dealbreaker / note
-    const includeCell = document.createElement('div');
-    const midCell = document.createElement('div');
-    const rightCell = document.createElement('div');
-
-    includeCell.innerHTML = `<label><input type="checkbox" data-k="${p.key}" data-kind="on" ${p.on?'checked':''}/> Include?</label>` + (p.helpLeft? `<div class="muted" style="font-size:.8rem;margin-top:4px">${p.helpLeft}</div>` : '');
-
-    midCell.innerHTML = `<strong>${p.label}</strong>`;
-
+  prefDefs.forEach((p, idx)=>{
+    // Main row
+    const c1=document.createElement('div'), c2=document.createElement('div'), c3=document.createElement('div');
+    c1.className='prefCell'; c2.className='prefCell'; c3.className='prefCell';
+    c1.innerHTML = `<label style="gap:6px"><input type="checkbox" data-k="${p.key}" data-kind="on" ${p.on?'checked':''}/> Include?</label>` + (p.helpLeft? `<div class="muted" style="font-size:.8rem;margin-top:4px">${p.helpLeft}</div>` : '');
+    c2.innerHTML = `<strong>${p.label}</strong>`;
     if (p.type==='special-gender'){
-      rightCell.innerHTML = `<span class="muted">Dealbreaker (always on)</span>`;
+      c3.innerHTML = `<span class="muted">Dealbreaker (always on)</span>`;
     } else if (p.type==='distance'){
-      rightCell.innerHTML = `<span class="muted">${p.noteRight||'Dealbreaker collected in form'}</span>`;
+      c3.innerHTML = `<span class="muted">${p.noteRight||'Dealbreaker collected in form'}</span>`;
     } else {
-      rightCell.innerHTML = `<label><input type="checkbox" data-k="${p.key}" data-kind="deal" ${p.deal?'checked':''}/> Dealbreaker</label>`;
+      c3.innerHTML = `<label><input type="checkbox" data-k="${p.key}" data-kind="deal" ${p.deal?'checked':''}/> Dealbreaker</label>`;
     }
+    table.appendChild(c1); table.appendChild(c2); table.appendChild(c3);
 
-    includeCell.className='prefRow';
-    midCell.className='prefRow';
-    rightCell.className='prefRow';
-    wrap.appendChild(includeCell);
-    wrap.appendChild(midCell);
-    wrap.appendChild(rightCell);
-
-    // Slider (skip for gender)
-    if (p.type!=='special-gender'){
-      const slider = document.createElement('div');
-      slider.className='prefSlider';
-      slider.innerHTML = `<input type="range" min="0" max="100" value="${Math.round((p.w||0)*100)}" data-k="${p.key}" data-kind="weight">
-        <div class="muted">Importance: <span data-val="${p.key}">${Math.round((p.w||0)*100)}</span>/100</div>`;
-      if (!p.on) slider.classList.add('hide');
-      wrap.appendChild(slider);
-    }
+    // Slider row (always present; disabled style when not included)
+    const sWrap=document.createElement('div'); sWrap.className='prefSliderCell'+(p.on?'':' disabled');
+    sWrap.innerHTML = (p.type!=='special-gender')
+      ? `<input type="range" min="0" max="100" value="${Math.round((p.w||0)*100)}" ${p.on?'':'disabled'}
+           data-k="${p.key}" data-kind="weight">
+         <div class="muted">Importance: <span data-val="${p.key}">${Math.round((p.w||0)*100)}</span>/100</div>`
+      : `<div class="muted">No weighting for Gender Preference (hard rule)</div>`;
+    const sRow=document.createElement('div'); sRow.className='prefSliderRow';
+    sRow.appendChild(sWrap);
+    table.appendChild(sRow);
   });
 }
+
 document.addEventListener('input',(e)=>{
   const kind=e.target.getAttribute('data-kind'); if(!kind) return;
   const key=e.target.getAttribute('data-k'); const p=prefDefs.find(x=>x.key===key); if(!p) return;
   if(kind==='on'){
     p.on = e.target.checked;
-    // hide/show the slider row under this pref
-    const all = qa(`[data-k="${CSS.escape(key)}"]`);
-    // find the slider just after the 3 cells (last of the group is the slider)
-    const sliders = qa('.prefSlider');
-    sliders.forEach(s=>{
-      const span = s.querySelector(`span[data-val="${CSS.escape(key)}"]`);
-      if (span) s.classList.toggle('hide', !p.on);
-    });
+    // toggle disabled state of its slider row
+    const span = document.querySelector(`span[data-val="${CSS.escape(key)}"]`);
+    const slider = document.querySelector(`input[type="range"][data-k="${CSS.escape(key)}"]`);
+    const cell = slider ? slider.closest('.prefSliderCell') : null;
+    if (slider){ slider.disabled = !p.on; }
+    if (cell){ cell.classList.toggle('disabled', !p.on); }
   }
   if(kind==='weight'){ p.w=(+e.target.value)/100; const v=document.querySelector(`span[data-val="${CSS.escape(key)}"]`); if(v) v.textContent=e.target.value; }
   if(kind==='deal'){ p.deal=e.target.checked; }
@@ -287,11 +289,7 @@ function intentRelevant(){
   const iGroup = steps.indexOf('groups');
   return iSpeed !== -1 && iGroup !== -1 && iSpeed < iGroup;
 }
-function setStepVisible(stepId, show){
-  const node = document.getElementById('step-'+stepId);
-  if (!node) return;
-  node.classList.toggle('hide', !show);
-}
+function setStepVisible(stepId, show){ const node=document.getElementById('step-'+stepId); if (node) node.classList.toggle('hide', !show); }
 function syncFlowVisibilityFromOptions(){
   setStepVisible('speed',  el('optSchedule').checked);
   setStepVisible('groups', el('optGroups').checked);
@@ -382,7 +380,7 @@ function genGAS(){
 /**
  * Generated by MatchBuilder
  * Paste into a bound Apps Script (Extensions → Apps Script). Use the menu.
- * Slim sheets: response sheets appear only when forms are linked.
+ * Response sheets appear only when forms are linked. Headers are protected.
  */
 const CONFIG = ${cfgJSON};
 
@@ -401,6 +399,17 @@ function onOpen(){
   m.addToUi();
 }
 
+/** Ensure & log helpers **/
+function _ensureLogs(){
+  const ss=SpreadsheetApp.getActive();
+  let sh=ss.getSheetByName('Logs'); if(!sh){ sh=ss.insertSheet('Logs'); sh.getRange(1,1,1,6).setValues([['Timestamp','Type','Name','Live URL','Edit URL','Id']]); sh.getRange(1,1,1,6).setFontWeight('bold'); _protectHeader(sh,6); }
+  return sh;
+}
+function _log(type,name,liveUrl,editUrl,id){
+  const sh=_ensureLogs(); const ts=new Date();
+  sh.appendRow([ts,type||'',name||'',liveUrl||'',editUrl||'',id||'']);
+}
+
 /** STEP 1: Sign-Up Form **/
 function step1_makeSignupForm(){
   const ss = SpreadsheetApp.getActive();
@@ -409,7 +418,7 @@ function step1_makeSignupForm(){
   form.setCollectEmail(true);
 
   const name = form.addTextItem().setTitle('Name').setRequired(true);
-  name.setValidation(FormApp.createTextValidation().requireTextLengthGreaterThan(1).build());
+  name.setValidation(FormApp.createTextValidation().requireTextLengthGreaterThanOrEqualTo(1).build());
 
   form.addListItem().setTitle('Gender')
     .setChoiceValues(['Woman','Man','Nonbinary','Other']).setRequired(true);
@@ -471,13 +480,15 @@ function step1_makeSignupForm(){
   });
 
   _writeQR('Intake Form', form.getEditUrl(), form.getPublishedUrl());
+  _log('Form','Intake', form.getPublishedUrl(), form.getEditUrl(), form.getId());
 
+  // Link responses into this spreadsheet; rename and protect header
   const intakeResp = _linkFormToThisSpreadsheet(form, 'Intake Responses');
   if (intakeResp) _protectHeaderAuto(intakeResp);
   SpreadsheetApp.getUi().alert('Sign-Up Form created and linked:\\n' + form.getPublishedUrl());
 }
 
-/** STEP 2: Schedule **/
+/** STEP 2: Schedule (Hungarian) **/
 function step2_buildSchedule(){
   const ss = SpreadsheetApp.getActive();
   const resp = ss.getSheetByName('Intake Responses');
@@ -532,7 +543,7 @@ function step3_createSlides(){
   if (!CONFIG.options.makeSlides){ SpreadsheetApp.getUi().alert('Slides disabled in Project.'); return; }
   const name = CONFIG.schedule.slidesName || 'Speed Dating Slides';
   const pres = SlidesApp.create(name);
-  pres.getSlides()[0].getShapes()[0].getText().setText(CONFIG.title);
+  pres.getSlides()[0]?.getShapes()[0]?.getText()?.setText(CONFIG.title);
   if (CONFIG.options.makeQRCodes && CONFIG.options.makePostForm){
     const postUrl = _ensurePostFormUrl();
     if (postUrl){
@@ -542,6 +553,7 @@ function step3_createSlides(){
       slide.insertImage(blob).setLeft(50).setTop(100).setWidth(300);
     }
   }
+  _log('Slides', name, pres.getUrl(), pres.getUrl(), pres.getId());
   SpreadsheetApp.getUi().alert('Slideshow created: ' + pres.getUrl());
 }
 
@@ -566,6 +578,7 @@ function step4_makeGroupIntentForm(){
   item.setValidation(FormApp.createCheckboxValidation().requireSelectAtMost(maxN).build());
 
   _writeQR('Group Activity Intent Form', form.getEditUrl(), form.getPublishedUrl());
+  _log('Form','Group Activity Intent', form.getPublishedUrl(), form.getEditUrl(), form.getId());
   const respSheet = _linkFormToThisSpreadsheet(form, 'Group Intent Responses');
   if (respSheet) _protectHeaderAuto(respSheet);
   SpreadsheetApp.getUi().alert('Group-Activity Intent form created:\\n' + form.getPublishedUrl());
@@ -646,6 +659,7 @@ function step6_makePostForm(){
     .requireTextMatchesPattern('^\\s*([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\s*(,\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\s*)*)$')
     .setHelpText('Example: a@b.com, c@d.org').build());
   _writeQR('Post-Event Form', form.getEditUrl(), form.getPublishedUrl());
+  _log('Form','Post-Event Match', form.getPublishedUrl(), form.getEditUrl(), form.getId());
   const postResp = _linkFormToThisSpreadsheet(form, 'Post Match Responses');
   if (postResp) _protectHeaderAuto(postResp);
   SpreadsheetApp.getUi().alert('Post-Event Form created and linked:\\n' + form.getPublishedUrl());
@@ -684,11 +698,12 @@ function step7_sendResultsEmails(){
   ui.alert(\`Done.\\n\${counts}\\nEmails sent: \${sent}\\nSkipped: \${skipped}\`);
 }
 
-/** Reset **/
+/** Reset (keeps Forms/Slides/Logs; clears generated data tabs) **/
 function stepX_resetGenerated(){
   const ss = SpreadsheetApp.getActive();
   ['Schedule','Groups','QR Codes'].forEach(n=>{ const sh=ss.getSheetByName(n); if(sh) sh.clear(); });
-  SpreadsheetApp.getUi().alert('Cleared generated sheets. (Forms and their response sheets remain.)');
+  _ensureLogs(); // make sure it exists
+  SpreadsheetApp.getUi().alert('Cleared generated sheets. Forms, Slides, and Logs are preserved.');
 }
 
 /* ===== Helpers ===== */
@@ -700,23 +715,38 @@ function _protectHeader(sh, cols){
   p.addEditor(Session.getEffectiveUser());
 }
 function _protectHeaderAuto(sh){ const cols = Math.max(1, sh.getLastColumn()); _protectHeader(sh, cols); }
+
 function _qr(u, size){ return 'https://chart.googleapis.com/chart?chs='+size+'x'+size+'&cht=qr&chl='+encodeURIComponent(u); }
 function _writeQR(label, editUrl, liveUrl){
   const ss = SpreadsheetApp.getActive(), sh = _sheet(ss,'QR Codes');
   const row = sh.getLastRow()+1;
   sh.getRange(row,1,1,2).setValues([[label, liveUrl]]);
-  try{ if (CONFIG.options.makeQRCodes){ const blob=UrlFetchApp.fetch(_qr(liveUrl, 300)).getBlob(); sh.insertImage(blob,3,row);} }catch(e){}
+  try{ const blob = CONFIG.options.makeQRCodes ? UrlFetchApp.fetch(_qr(liveUrl, 300)).getBlob() : null;
+       if (blob) sh.insertImage(blob,3,row);
+  }catch(e){}
+  _protectHeaderAuto(sh);
+  _log('QR', label, liveUrl, editUrl, '');
 }
+
+/** Robustly link a new Form to this spreadsheet and rename its response tab */
 function _linkFormToThisSpreadsheet(form, desiredName){
   const ss = SpreadsheetApp.getActive();
-  const before = ss.getSheets().map(s=>s.getSheetId());
+  const beforeNames = ss.getSheets().map(s=>s.getName());
   form.setDestination(FormApp.DestinationType.SPREADSHEET, ss.getId());
   SpreadsheetApp.flush();
-  const after = ss.getSheets();
-  const added = after.find(s => before.indexOf(s.getSheetId()) === -1);
-  if (added) { try{added.setName(desiredName);}catch(e){} return added; }
-  return ss.getSheetByName(desiredName) || ss.getSheetByName('Form Responses 1');
+  Utilities.sleep(500);
+  // If desiredName already exists, we’re done
+  let sh = ss.getSheetByName(desiredName);
+  if (sh) return sh;
+  // Try to find the default "Form Responses N" sheet and rename it
+  const resp = ss.getSheets().find(s => /^Form Responses \d+$/.test(s.getName()) && !beforeNames.includes(s.getName()));
+  if (resp){ try{resp.setName(desiredName);}catch(e){} return resp; }
+  // Fallback: find any Form Responses tab
+  const anyResp = ss.getSheets().find(s => /^Form Responses \d+$/.test(s.getName()));
+  if (anyResp){ try{anyResp.setName(desiredName);}catch(e){} return anyResp; }
+  return null;
 }
+
 function _read(sh){ const v=sh.getDataRange().getDisplayValues(); const h=v.shift(); return v.filter(r=>r.join('').trim()!=='').map(r=>{const o={}; h.forEach((c,i)=>o[c]=r[i]); return o;}); }
 function _normEmail(x){ return String(x||'').trim().toLowerCase(); }
 function _nameEmail(r){ const e=r['Email Address']||''; return r['Name'] ? r['Name']+' <'+e+'>' : e; }
